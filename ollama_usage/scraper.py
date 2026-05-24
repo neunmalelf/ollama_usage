@@ -17,6 +17,10 @@ _SETTINGS_URL = "https://ollama.com/settings"
 _TIMEOUT = 10  # seconds
 _SSL_CONTEXT = ssl.create_default_context()
 
+_PLAN_RE = re.compile(r'capitalize[^>]*>\s*(\w+)\s*</')
+_PERCENT_RE = re.compile(r'([\d.]+)%\s*used')
+_TIME_RE = re.compile(r'data-time="([^"]+)"')
+
 
 @dataclass
 class PeriodUsage:
@@ -87,7 +91,7 @@ def _check_auth(html: str) -> None:
 # --- Parsing ---
 
 def _extract_plan(html: str) -> str:
-    match = re.search(r'capitalize[^>]*>\s*(\w+)\s*</', html)
+    match = _PLAN_RE.search(html)
     if not match:
         raise ParseError("Could not extract plan from HTML.")
     return match.group(1).lower()
@@ -106,8 +110,8 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
     
     if session_pos == -1 and weekly_pos == -1:
         # Fallback to position-based extraction if sections not found
-        matches = re.findall(r'([\d.]+)%\s*used', html)
-        times = re.findall(r'data-time="([^"]+)"', html)
+        matches = _PERCENT_RE.findall(html)
+        times = _TIME_RE.findall(html)
         if len(matches) < 2:
             raise ParseError(f"Expected 2 usage percentages, found {len(matches)}.")
         if len(times) < 2:
@@ -116,12 +120,12 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
     
     # Extract percentage and time after each section marker
     def extract_after(pos: int, label: str) -> tuple[float, str]:
-        # Find the next "% used" after this position
-        pct_match = re.search(r'([\d.]+)%\s*used', html[pos:])
+        # Find the next "% used" after this position using pos parameter (no slicing)
+        pct_match = _PERCENT_RE.search(html, pos)
         if not pct_match:
             raise ParseError(f"Could not find {label} usage percentage.")
-        # Find the next data-time after this position
-        time_match = re.search(r'data-time="([^"]+)"', html[pos:])
+        # Find the next data-time after this position using pos parameter
+        time_match = _TIME_RE.search(html, pos)
         if not time_match:
             raise ParseError(f"Could not find {label} reset time.")
         return float(pct_match.group(1)), time_match.group(1)

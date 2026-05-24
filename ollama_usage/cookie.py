@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import tempfile
 from base64 import b64decode
+from functools import lru_cache
 from typing import Callable, Generator
 
 from ollama_usage.exceptions import (
@@ -35,8 +36,12 @@ def _copy_db(path: pathlib.Path) -> Generator[str, None, None]:
     if not path.exists():
         raise BrowserNotFoundError(f"Cookie database not found: {path}")
     tmp = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
-    shutil.copy2(str(path), tmp.name)
     tmp.close()
+    try:
+        shutil.copy2(str(path), tmp.name)
+    except OSError as e:
+        pathlib.Path(tmp.name).unlink(missing_ok=True)
+        raise BrowserNotFoundError(f"Could not copy cookie database (it may be locked by a running browser): {e}") from e
     try:
         yield tmp.name
     finally:
@@ -148,7 +153,8 @@ def get_cookie_firefox() -> str | None:
 
 # --- Chromium-based browsers ---
 
-def _chromium_key(local_state: pathlib.Path) -> bytes:
+@lru_cache(maxsize=8)
+def _chromium_key(local_state: pathlib.Path, browser_name: str = "Chrome") -> bytes:
     """Decrypt the AES key from Chrome's Local State file."""
     if not local_state.exists():
         raise BrowserNotFoundError(f"Local State not found: {local_state}")
@@ -162,14 +168,21 @@ def _chromium_key(local_state: pathlib.Path) -> bytes:
     elif _SYSTEM == "Darwin":
         import hashlib
         import subprocess
+        service_map = {
+            "Chrome": ("Chrome", "Chrome Safe Storage"),
+            "Brave": ("Brave", "Brave Safe Storage"),
+            "Edge": ("Microsoft Edge", "Microsoft Edge Safe Storage"),
+            "Opera": ("Opera", "Opera Safe Storage"),
+        }
+        account, service = service_map.get(browser_name, ("Chrome", "Chrome Safe Storage"))
         result = subprocess.run(
-            ["security", "find-generic-password", "-a", "Chrome",
-             "-s", "Chrome Safe Storage", "-w"],
+            ["security", "find-generic-password", "-a", account,
+             "-s", service, "-w"],
             capture_output=True, text=True,
         )
         if result.returncode != 0 or not result.stdout.strip():
             raise BrowserNotFoundError(
-                f"Could not retrieve Chrome Safe Storage key from Keychain "
+                f"Could not retrieve {browser_name} Safe Storage key from Keychain "
                 f"(exit {result.returncode}): {result.stderr.strip()}"
             )
         password = result.stdout.strip().encode()
@@ -199,9 +212,9 @@ def _read_chromium_cookie(db_path: pathlib.Path, key: bytes) -> str | None:
     return _decrypt_chromium_value(encrypted, key)
 
 
-def _chromium_cookie(base: pathlib.Path, cookies_rel: pathlib.Path) -> str | None:
+def _chromium_cookie(base: pathlib.Path, cookies_rel: pathlib.Path, browser_name: str = "Chrome") -> str | None:
     """Generic helper for all Chromium-based browsers."""
-    key = _chromium_key(base / "Local State")
+    key = _chromium_key(base / "Local State", browser_name)
     return _read_chromium_cookie(base / cookies_rel, key)
 
 
@@ -238,7 +251,7 @@ def get_cookie_chrome() -> str | None:
         linux_snap="snap/chromium/common/chromium/Default",
         linux_flatpak=".var/app/com.google.Chrome/config/google-chrome",
     )
-    return _chromium_cookie(base, _CHROMIUM_COOKIES_PATH)
+    return _chromium_cookie(base, _CHROMIUM_COOKIES_PATH, "Chrome")
 
 
 def get_cookie_edge() -> str | None:
@@ -248,7 +261,7 @@ def get_cookie_edge() -> str | None:
         mac="Library/Application Support/Microsoft Edge",
         linux_flatpak=".var/app/com.microsoft.Edge/config/microsoft-edge",
     )
-    return _chromium_cookie(base, _CHROMIUM_COOKIES_PATH)
+    return _chromium_cookie(base, _CHROMIUM_COOKIES_PATH, "Edge")
 
 
 def get_cookie_brave() -> str | None:
@@ -258,7 +271,7 @@ def get_cookie_brave() -> str | None:
         mac="Library/Application Support/BraveSoftware/Brave-Browser",
         linux_flatpak=".var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser",
     )
-    return _chromium_cookie(base, _CHROMIUM_COOKIES_PATH)
+    return _chromium_cookie(base, _CHROMIUM_COOKIES_PATH, "Brave")
 
 
 def get_cookie_opera() -> str | None:
@@ -267,7 +280,7 @@ def get_cookie_opera() -> str | None:
         linux=".config/opera",
         mac="Library/Application Support/com.operasoftware.Opera",
     )
-    return _chromium_cookie(base, pathlib.Path("Cookies"))
+    return _chromium_cookie(base, pathlib.Path("Cookies"), "Opera")
 
 
 # --- Auto-detection ---

@@ -2,6 +2,7 @@ import argparse
 import itertools
 import json
 import logging
+import os
 import sys
 import time
 from typing import Optional
@@ -17,6 +18,7 @@ from ollama_usage.cookie import (
     get_cookie_opera,
 )
 from ollama_usage.exceptions import OllamaUsageError, NetworkError
+from ollama_usage.exceptions import AuthError  # We also need AuthError here
 from ollama_usage.notify import check_and_notify, notify_available, NotifyState
 from ollama_usage.scraper import get_usage
 
@@ -54,7 +56,8 @@ BROWSERS = {
 def _color_pct(pct: float) -> str:
     """Return the percentage string colored by severity."""
     text = f"{pct}%"
-    if not _HAS_COLOR:
+    use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
+    if not use_color:
         return text
     if pct < 50:
         color = Fore.GREEN
@@ -85,7 +88,8 @@ def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
     if session_pct > threshold or weekly_pct > threshold:
         if not quiet:
             msg = f"Warning: usage exceeds {threshold}%"
-            if _HAS_COLOR:
+            use_color = _HAS_COLOR and sys.stderr.isatty() and "NO_COLOR" not in os.environ
+            if use_color:
                 print(Fore.RED + "⚠️  " + msg + Style.RESET_ALL, file=sys.stderr)
             else:
                 print(f"⚠️  {msg}", file=sys.stderr)
@@ -95,6 +99,9 @@ def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
 
 def _watch_countdown(interval: int) -> None:
     """Animated countdown before next refresh."""
+    if not sys.stdout.isatty():
+        time.sleep(interval)
+        return
     spinner = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
     for remaining in range(interval, 0, -1):
         for _ in range(10):
@@ -188,17 +195,17 @@ def main():
 
         interval = max(10, min(3600, args.interval))
 
-        if args.cookie:
-            cookie = _sanitize_cookie(args.cookie)
-        elif args.browser:
-            cookie = _sanitize_cookie(BROWSERS[args.browser]())
-        else:
+        def get_current_cookie() -> str:
+            if args.cookie:
+                return _sanitize_cookie(args.cookie)
+            if args.browser:
+                return _sanitize_cookie(BROWSERS[args.browser]())
             env_cookie = get_cookie_env()
             if env_cookie:
-                cookie = _sanitize_cookie(env_cookie)
-            else:
-                cookie = _sanitize_cookie(get_cookie_auto())
+                return _sanitize_cookie(env_cookie)
+            return _sanitize_cookie(get_cookie_auto())
 
+        cookie = get_current_cookie()
         logger.debug("Cookie obtained (***)")
 
         alert_triggered = False
@@ -215,7 +222,7 @@ def main():
         if args.widget:
             from ollama_usage.widget import launch_widget
             launch_widget(
-                cookie=cookie,
+                cookie=cookie if args.cookie else get_current_cookie,
                 interval=interval,
                 theme=args.theme,
                 size=args.size,
@@ -237,6 +244,23 @@ def main():
                             check_and_notify(data, args.notify_threshold, notify_state)
                         if _check_alert(data, args.alert, args.quiet):
                             alert_triggered = True
+                    except AuthError as e:
+                        if args.cookie:
+                            print(f"Error: {e}", file=sys.stderr)
+                            raise SystemExit(1)
+                        else:
+                            try:
+                                logger.info("Cookie expired/invalid. Attempting auto-refresh...")
+                                cookie = get_current_cookie()
+                                data = get_usage(cookie)
+                                display(data, args.json, args.quiet)
+                                if args.notify:
+                                    check_and_notify(data, args.notify_threshold, notify_state)
+                                if _check_alert(data, args.alert, args.quiet):
+                                    alert_triggered = True
+                            except Exception as refresh_err:
+                                print(f"Cookie auto-refresh failed: {refresh_err}", file=sys.stderr)
+                                raise SystemExit(1)
                     except NetworkError as e:
                         print(f"Network error: {e} — retrying in {interval}s", file=sys.stderr)
                     _watch_countdown(interval)
