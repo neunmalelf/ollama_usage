@@ -179,14 +179,14 @@ class TestCLIColoration:
     @patch("ollama_usage.cli._HAS_COLOR", new=True)
     def test_color_disabled_on_non_tty(self, mock_isatty) -> None:
         from ollama_usage.cli import _color_pct
-        assert _color_pct(50.0) == "50.0%"
+        assert _color_pct(50.0) == " 50.0%"
 
     @patch("ollama_usage.cli.sys.stdout.isatty", return_value=True)
     @patch.dict("os.environ", {"NO_COLOR": "1"})
     @patch("ollama_usage.cli._HAS_COLOR", new=True)
     def test_color_disabled_on_no_color_env(self, mock_isatty) -> None:
         from ollama_usage.cli import _color_pct
-        assert _color_pct(50.0) == "50.0%"
+        assert _color_pct(50.0) == " 50.0%"
 
     @patch("ollama_usage.cli.sys.stdout.isatty", return_value=True)
     @patch.dict("os.environ", {}, clear=True)
@@ -194,7 +194,7 @@ class TestCLIColoration:
     def test_color_enabled_on_tty_without_no_color(self, mock_isatty) -> None:
         from ollama_usage.cli import _color_pct, Fore, Style
         # When color is enabled, it should output colored text
-        expected = Fore.YELLOW + "75.0%" + Style.RESET_ALL
+        expected = Fore.YELLOW + " 75.0%" + Style.RESET_ALL
         assert _color_pct(75.0) == expected
 
 
