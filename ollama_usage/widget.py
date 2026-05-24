@@ -14,7 +14,8 @@ import threading
 import tkinter as tk
 from datetime import datetime, timezone
 
-from ollama_usage.exceptions import NetworkError, OllamaUsageError
+from typing import Callable
+from ollama_usage.exceptions import NetworkError, OllamaUsageError, AuthError
 from ollama_usage.scraper import get_usage
 
 logger = logging.getLogger(__name__)
@@ -136,14 +137,15 @@ class OllamaWidget:
 
     def __init__(
         self,
-        cookie: str,
+        cookie: str | Callable[[], str],
         interval: int   = 30,
         theme: str      = "dark",
         size: str       = "full",
         opacity: float  = 0.92,
         position: str | None = None,
     ) -> None:
-        self._cookie      = cookie
+        self._cookie_fn   = cookie if callable(cookie) else lambda: cookie
+        self._cookie      = self._cookie_fn()
         self._interval    = max(10, interval)
         self._theme       = THEMES.get(theme, THEMES["dark"])
         self._size        = size       # "compact" | "full"
@@ -299,6 +301,14 @@ class OllamaWidget:
             self._error = None
         except NetworkError:
             self._error = "Network error"
+        except AuthError:
+            try:
+                logger.info("Widget: Cookie expired. Attempting to refresh...")
+                self._cookie = self._cookie_fn()
+                self._data  = get_usage(self._cookie)
+                self._error = None
+            except Exception as refresh_exc:
+                self._error = f"Auth error: {refresh_exc}"
         except OllamaUsageError as exc:
             self._error = str(exc)
         finally:
@@ -417,7 +427,7 @@ class OllamaWidget:
 # ---------------------------------------------------------------------------
 
 def launch_widget(
-    cookie: str,
+    cookie: str | Callable[[], str],
     interval: int        = 30,
     theme: str           = "dark",
     size: str            = "full",
@@ -428,7 +438,7 @@ def launch_widget(
     Launch the always-on-top Ollama quota widget.
 
     Args:
-        cookie:   __Secure-session cookie value.
+        cookie:   __Secure-session cookie value or callable to fetch/refresh it.
         interval: Refresh interval in seconds (min 10).
         theme:    "dark" | "light" | "minimal".
         size:     "full" (bars + countdown) | "compact" (text only).

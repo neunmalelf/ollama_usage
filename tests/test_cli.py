@@ -166,3 +166,43 @@ class TestIntervalClamping:
 
     def test_default_interval_30_is_unchanged(self) -> None:
         assert self._run_main_interval(30) == 30
+
+
+# ---------------------------------------------------------------------------
+# Output coloration and TTY checks
+# ---------------------------------------------------------------------------
+
+class TestCLIColoration:
+
+    @patch("ollama_usage.cli.sys.stdout.isatty", return_value=False)
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("ollama_usage.cli._HAS_COLOR", new=True)
+    def test_color_disabled_on_non_tty(self, mock_isatty) -> None:
+        from ollama_usage.cli import _color_pct
+        assert _color_pct(50.0) == "50.0%"
+
+    @patch("ollama_usage.cli.sys.stdout.isatty", return_value=True)
+    @patch.dict("os.environ", {"NO_COLOR": "1"})
+    @patch("ollama_usage.cli._HAS_COLOR", new=True)
+    def test_color_disabled_on_no_color_env(self, mock_isatty) -> None:
+        from ollama_usage.cli import _color_pct
+        assert _color_pct(50.0) == "50.0%"
+
+    @patch("ollama_usage.cli.sys.stdout.isatty", return_value=True)
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("ollama_usage.cli._HAS_COLOR", new=True)
+    def test_color_enabled_on_tty_without_no_color(self, mock_isatty) -> None:
+        from ollama_usage.cli import _color_pct, Fore, Style
+        # When color is enabled, it should output colored text
+        expected = Fore.YELLOW + "75.0%" + Style.RESET_ALL
+        assert _color_pct(75.0) == expected
+
+
+class TestCLICountdownSilent:
+
+    @patch("ollama_usage.cli.sys.stdout.isatty", return_value=False)
+    @patch("ollama_usage.cli.time.sleep")
+    def test_countdown_silent_on_non_tty(self, mock_sleep, mock_isatty) -> None:
+        from ollama_usage.cli import _watch_countdown
+        _watch_countdown(30)
+        mock_sleep.assert_called_once_with(30)
