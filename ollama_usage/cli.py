@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from typing import Optional
 from importlib.metadata import version as get_version
 
@@ -54,18 +55,39 @@ BROWSERS = {
 
 
 def _color_pct(pct: float) -> str:
-    """Return the percentage string colored by severity."""
-    text = f"{pct}%"
+    """Return the percentage string colored by severity and padded for right-alignment."""
+    text = f"{pct:.1f}%"
+    padded_text = f"{text:>6}"
     use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
     if not use_color:
-        return text
+        return padded_text
     if pct < 50:
         color = Fore.GREEN
     elif pct < 80:
         color = Fore.YELLOW
     else:
         color = Fore.RED
-    return color + text + Style.RESET_ALL
+    return color + padded_text + Style.RESET_ALL
+
+
+def _format_time_left(iso: str) -> str:
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        diff = dt - datetime.now(timezone.utc)
+        total_seconds = int(diff.total_seconds())
+        if total_seconds <= 0:
+            return " (resets now)"
+        
+        hours, rem = divmod(total_seconds, 3600)
+        minutes, _ = divmod(rem, 60)
+        
+        if hours >= 24:
+            days, hours = divmod(hours, 24)
+            return f" (in {days}d {hours}h {minutes}m)"
+        else:
+            return f" (in {hours}h {minutes}m)"
+    except Exception:
+        return ""
 
 
 def display(data: dict, as_json: bool, quiet: bool) -> None:
@@ -75,8 +97,8 @@ def display(data: dict, as_json: bool, quiet: bool) -> None:
         print(json.dumps(data, indent=2))
     else:
         print(f"Plan    : {data['plan']}")
-        print(f"Session : {_color_pct(data['session']['used_pct'])} used — reset at {data['session']['resets_at']}")
-        print(f"Weekly  : {_color_pct(data['weekly']['used_pct'])} used — reset at {data['weekly']['resets_at']}")
+        print(f"Session : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'])}")
+        print(f"Weekly  : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'])}")
 
 
 def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:

@@ -49,6 +49,9 @@ if [ -f "${DIST_DIR}/${OUTPUT_NAME}" ]; then
     echo ""
     echo "Testing binary..."
     "${DIST_DIR}/${OUTPUT_NAME}" --version
+    # copy the *.exe to c:\Users\fmann\scoop\apps\python\current\Scripts\ overwrite the file if it already exist
+    echo "Copying ${DIST_DIR}/${OUTPUT_NAME} to /c/Users/fmann/scoop/apps/python/current/Scripts/"
+    cp "${DIST_DIR}/${OUTPUT_NAME}" /c/Users/fmann/scoop/apps/python/current/Scripts/
 else
     echo "ERROR: Build failed - no output found"
     exit 1
