@@ -28,6 +28,16 @@ try:
 except ImportError:
     _HAS_COLOR = False
 
+
+def _get_version() -> str:
+    """Get package version, with fallback for frozen executables."""
+    try:
+        return get_version("ollama-usage")
+    except Exception:
+        # Fallback for frozen executables where package metadata is unavailable
+        return "0.1.1"
+
+
 def _sanitize_cookie(value: str) -> str:
     return value.strip().replace("\r", "").replace("\n", "").replace("\0", "")
 
@@ -102,7 +112,7 @@ def main():
     parser.add_argument(
         "-v", "--version",
         action="version",
-        version=f"ollama-usage {get_version('ollama-usage')}"
+        version=f"ollama-usage {_get_version()}"
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")

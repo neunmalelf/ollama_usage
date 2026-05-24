@@ -93,26 +93,55 @@ def _extract_plan(html: str) -> str:
     return match.group(1).lower()
 
 
-def _extract_percentages(html: str) -> tuple[float, float]:
-    matches = re.findall(r'([\d.]+)%\s*used', html)
-    if len(matches) < 2:
-        raise ParseError(f"Expected 2 usage percentages, found {len(matches)}.")
-    return float(matches[0]), float(matches[1])
-
-
-def _extract_reset_times(html: str) -> tuple[str, str]:
-    matches = re.findall(r'data-time="([^"]+)"', html)
-    if len(matches) < 2:
-        raise ParseError(f"Expected 2 reset timestamps, found {len(matches)}.")
-    return matches[0], matches[1]
+def _extract_usage(html: str) -> tuple[float, float, str, str]:
+    """Extract session and weekly usage from labeled sections in HTML.
+    
+    This function is section-aware and does not depend on order.
+    It finds each usage section by its label and extracts the corresponding
+    percentage and reset time from within that section.
+    """
+    # Find positions of each section marker
+    session_pos = html.lower().find("session usage")
+    weekly_pos = html.lower().find("weekly usage")
+    
+    if session_pos == -1 and weekly_pos == -1:
+        # Fallback to position-based extraction if sections not found
+        matches = re.findall(r'([\d.]+)%\s*used', html)
+        times = re.findall(r'data-time="([^"]+)"', html)
+        if len(matches) < 2:
+            raise ParseError(f"Expected 2 usage percentages, found {len(matches)}.")
+        if len(times) < 2:
+            raise ParseError(f"Expected 2 reset timestamps, found {len(times)}.")
+        return float(matches[0]), float(matches[1]), times[0], times[1]
+    
+    # Extract percentage and time after each section marker
+    def extract_after(pos: int, label: str) -> tuple[float, str]:
+        # Find the next "% used" after this position
+        pct_match = re.search(r'([\d.]+)%\s*used', html[pos:])
+        if not pct_match:
+            raise ParseError(f"Could not find {label} usage percentage.")
+        # Find the next data-time after this position
+        time_match = re.search(r'data-time="([^"]+)"', html[pos:])
+        if not time_match:
+            raise ParseError(f"Could not find {label} reset time.")
+        return float(pct_match.group(1)), time_match.group(1)
+    
+    if session_pos == -1:
+        raise ParseError("Could not find 'Session usage' section in HTML.")
+    if weekly_pos == -1:
+        raise ParseError("Could not find 'Weekly usage' section in HTML.")
+    
+    session_pct, session_time = extract_after(session_pos, "session")
+    weekly_pct, weekly_time = extract_after(weekly_pos, "weekly")
+    
+    return session_pct, weekly_pct, session_time, weekly_time
 
 
 def parse_html(html: str) -> dict:
     """Parse the settings page HTML and return a usage dict."""
     _check_auth(html)
     plan = _extract_plan(html)
-    session_pct, weekly_pct = _extract_percentages(html)
-    session_time, weekly_time = _extract_reset_times(html)
+    session_pct, weekly_pct, session_time, weekly_time = _extract_usage(html)
     logger.debug("Parsing HTML...")
     logger.debug("Parsed: plan=%s session=%.1f%% weekly=%.1f%%", plan, session_pct, weekly_pct)
     return UsageData(

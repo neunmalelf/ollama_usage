@@ -31,6 +31,29 @@ def make_html(
     """
 
 
+def make_html_reversed(
+    plan: str = "free",
+    session_pct: float = 0.0,
+    session_time: str = "2026-04-04T17:00:00Z",
+    weekly_pct: float = 27.9,
+    weekly_time: str = "2026-04-06T00:00:00Z",
+) -> str:
+    """Build HTML with Weekly usage appearing BEFORE Session usage.
+
+    This tests that parsing is order-independent and correctly associates
+    percentages with their labeled sections.
+    """
+    return f"""
+    <span class="capitalize">{plan}</span>
+    <span class="text-sm">Weekly usage</span>
+    <span class="text-sm">{weekly_pct}% used</span>
+    <div class="local-time" data-time="{weekly_time}">Resets soon</div>
+    <span class="text-sm">Session usage</span>
+    <span class="text-sm">{session_pct}% used</span>
+    <div class="local-time" data-time="{session_time}">Resets soon</div>
+    """
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -72,7 +95,7 @@ class TestPlan:
         assert parse_html(make_html(plan=plan))["plan"] == plan
 
     def test_plan_is_lowercase(self) -> None:
-        # Ollama may render "Free" or "FREE" — we always return lowercase
+        # Ollama may render "Free" or "FREE" - we always return lowercase
         html = make_html(plan="FREE")
         assert parse_html(html)["plan"] == "free"
 
@@ -145,6 +168,80 @@ class TestWeeklyUsage:
     def test_weekly_full(self) -> None:
         data = parse_html(make_html(weekly_pct=100.0))
         assert data["weekly"]["used_pct"] == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Order-independent parsing (reversed sections)
+# ---------------------------------------------------------------------------
+
+class TestReversedOrderParsing:
+    """Tests that parsing correctly associates values with sections
+    regardless of the order they appear in the HTML.
+
+    This verifies the fix for a bug where weekly usage showed session values
+    when the real HTML had Weekly section before Session section.
+    """
+
+    def test_session_pct_correct_when_weekly_first(self) -> None:
+        """Session percentage should be correct even when Weekly appears first."""
+        html = make_html_reversed(session_pct=45.0, weekly_pct=80.0)
+        data = parse_html(html)
+        # Session should be 45.0, not 80.0 (the weekly value)
+        assert data["session"]["used_pct"] == 45.0
+
+    def test_weekly_pct_correct_when_weekly_first(self) -> None:
+        """Weekly percentage should be correct even when Weekly appears first."""
+        html = make_html_reversed(session_pct=45.0, weekly_pct=80.0)
+        data = parse_html(html)
+        # Weekly should be 80.0, not 45.0 (the session value)
+        assert data["weekly"]["used_pct"] == 80.0
+
+    def test_session_resets_at_correct_when_weekly_first(self) -> None:
+        """Session reset time should be correct even when Weekly appears first."""
+        html = make_html_reversed(
+            session_time="2026-04-04T17:00:00Z",
+            weekly_time="2026-04-06T00:00:00Z",
+        )
+        data = parse_html(html)
+        assert data["session"]["resets_at"] == "2026-04-04T17:00:00Z"
+
+    def test_weekly_resets_at_correct_when_weekly_first(self) -> None:
+        """Weekly reset time should be correct even when Weekly appears first."""
+        html = make_html_reversed(
+            session_time="2026-04-04T17:00:00Z",
+            weekly_time="2026-04-06T00:00:00Z",
+        )
+        data = parse_html(html)
+        assert data["weekly"]["resets_at"] == "2026-04-06T00:00:00Z"
+
+    def test_reversed_full_values(self) -> None:
+        """Full structure should be correct with reversed order."""
+        html = make_html_reversed(
+            plan="pro",
+            session_pct=45.0,
+            session_time="2026-04-05T10:00:00Z",
+            weekly_pct=80.0,
+            weekly_time="2026-04-07T00:00:00Z",
+        )
+        data = parse_html(html)
+        assert data == {
+            "plan": "pro",
+            "session": {"used_pct": 45.0, "resets_at": "2026-04-05T10:00:00Z"},
+            "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
+        }
+
+    @pytest.mark.parametrize("session_pct,weekly_pct", [
+        (0.0, 100.0),    # session empty, weekly full
+        (100.0, 0.0),    # session full, weekly empty
+        (50.0, 50.0),    # equal values (but still distinct)
+        (99.9, 100.0),   # edge cases
+    ])
+    def test_reversed_various_values(self, session_pct: float, weekly_pct: float) -> None:
+        """Parsing should correctly distinguish session from weekly regardless of values."""
+        html = make_html_reversed(session_pct=session_pct, weekly_pct=weekly_pct)
+        data = parse_html(html)
+        assert data["session"]["used_pct"] == session_pct
+        assert data["weekly"]["used_pct"] == weekly_pct
 
 
 # ---------------------------------------------------------------------------
@@ -256,11 +353,11 @@ class TestParseErrors:
             parse_html("")
 
 # ---------------------------------------------------------------------------
-# _fetch_html — couverture réseau (lignes 52-70)
+# _fetch_html - couverture réseau (lignes 52-70)
 # ---------------------------------------------------------------------------
 
 class TestFetchHtml:
-    """Tests pour _fetch_html via mock urllib — couvre les chemins réseau."""
+    """Tests pour _fetch_html via mock urllib - couvre les chemins réseau."""
 
     def _make_response(self, body: str, status: int = 200):
         """Crée un faux objet response compatible urllib context manager."""
@@ -320,7 +417,7 @@ class TestFetchHtml:
 
 
 # ---------------------------------------------------------------------------
-# get_usage — intégration scraper complet
+# get_usage - intégration scraper complet
 # ---------------------------------------------------------------------------
 
 class TestGetUsage:
@@ -373,7 +470,7 @@ class TestGetUsage:
 
 
 # ---------------------------------------------------------------------------
-# __init__.py — exports publics
+# __init__.py - exports publics
 # ---------------------------------------------------------------------------
 
 class TestPublicExports:
