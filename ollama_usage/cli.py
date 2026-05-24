@@ -6,27 +6,31 @@ import os
 import sys
 import time
 from datetime import datetime, timezone
-from typing import Optional
 from importlib.metadata import version as get_version
+from typing import Optional
 
 from ollama_usage.cookie import (
     get_cookie_auto,
-    get_cookie_env,
-    get_cookie_firefox,
+    get_cookie_brave,
     get_cookie_chrome,
     get_cookie_edge,
-    get_cookie_brave,
+    get_cookie_env,
+    get_cookie_firefox,
     get_cookie_opera,
 )
-from ollama_usage.exceptions import OllamaUsageError, NetworkError
-from ollama_usage.exceptions import AuthError  # We also need AuthError here
-from ollama_usage.notify import check_and_notify, notify_available, NotifyState
+from ollama_usage.exceptions import (
+    AuthError,  # We also need AuthError here
+    NetworkError,
+    OllamaUsageError,
+)
+from ollama_usage.notify import NotifyState, check_and_notify, notify_available
 from ollama_usage.scraper import get_usage
 
 logger = logging.getLogger(__name__)
 
 try:
     from colorama import Fore, Style, just_fix_windows_console
+
     _HAS_COLOR = True
 except ImportError:
     _HAS_COLOR = False
@@ -77,15 +81,20 @@ def _format_time_left(iso: str) -> str:
         total_seconds = int(diff.total_seconds())
         if total_seconds <= 0:
             return " (resets now)"
-        
+
         hours, rem = divmod(total_seconds, 3600)
         minutes, _ = divmod(rem, 60)
-        
+
         if hours >= 24:
             days, hours = divmod(hours, 24)
-            return f" (in {days}d {hours}h {minutes}m)"
+            days_str = f"{days:>2}d"
         else:
-            return f" (in {hours}h {minutes}m)"
+            days_str = "   "
+
+        hours_str = f"{hours:>2}h"
+        minutes_str = f"{minutes:>2}m"
+
+        return f" (in {days_str} {hours_str} {minutes_str})"
     except Exception:
         return ""
 
@@ -96,9 +105,16 @@ def display(data: dict, as_json: bool, quiet: bool) -> None:
     if as_json:
         print(json.dumps(data, indent=2))
     else:
-        print(f"Plan    : {data['plan']}")
-        print(f"Session : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'])}")
-        print(f"Weekly  : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'])}")
+        plan = data['plan']
+        if _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+            plan = f"{Fore.CYAN}{plan}{Style.RESET_ALL}"
+        print(f"Plan    : {plan}")
+        print(
+            f"Session : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'])}"
+        )
+        print(
+            f"Weekly  : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'])}"
+        )
 
 
 def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
@@ -110,7 +126,9 @@ def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
     if session_pct > threshold or weekly_pct > threshold:
         if not quiet:
             msg = f"Warning: usage exceeds {threshold}%"
-            use_color = _HAS_COLOR and sys.stderr.isatty() and "NO_COLOR" not in os.environ
+            use_color = (
+                _HAS_COLOR and sys.stderr.isatty() and "NO_COLOR" not in os.environ
+            )
             if use_color:
                 print(Fore.RED + "⚠️  " + msg + Style.RESET_ALL, file=sys.stderr)
             else:
@@ -127,7 +145,9 @@ def _watch_countdown(interval: int) -> None:
     spinner = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
     for remaining in range(interval, 0, -1):
         for _ in range(10):
-            sys.stdout.write(f"\r{next(spinner)} Refreshing in {remaining}s — Ctrl+C to quit  ")
+            sys.stdout.write(
+                f"\r{next(spinner)} Refreshing in {remaining}s — Ctrl+C to quit  "
+            )
             sys.stdout.flush()
             time.sleep(0.1)
     sys.stdout.write("\r" + " " * 50 + "\r")
@@ -139,9 +159,7 @@ def main():
         description="Display your Ollama Cloud quota usage"
     )
     parser.add_argument(
-        "-v", "--version",
-        action="version",
-        version=f"ollama-usage {_get_version()}"
+        "-v", "--version", action="version", version=f"ollama-usage {_get_version()}"
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")
@@ -150,56 +168,44 @@ def main():
     )
     parser.add_argument("--watch", action="store_true", help="Refresh continuously")
     parser.add_argument(
-        "--interval", type=int, default=30,
-        help="Refresh interval in seconds (default: 30, min: 10, max: 3600, requires --watch)"
+        "--interval",
+        type=int,
+        default=30,
+        help="Refresh interval in seconds (default: 30, min: 10, max: 3600, requires --watch)",
     )
     parser.add_argument(
-        "--alert", type=float, metavar="PCT",
-        help="Exit with code 1 if session or weekly usage exceeds PCT%%"
-    )
-    parser.add_argument(
-        "--quiet", action="store_true",
-        help="Suppress all output — only set exit code (useful with --alert)"
-    )
-    parser.add_argument(
-        "--notify", action="store_true",
-        help="Send desktop notifications when quota exceeds threshold (requires plyer)"
-    )
-    parser.add_argument(
-        "--notify-threshold", type=float, default=80.0, metavar="PCT",
-        help="Threshold for desktop notifications in %% (default: 80, requires --notify)"
-    )
-    parser.add_argument(
-        "--widget",
-        action="store_true",
-        help="Launch desktop widget"
-    )
-    parser.add_argument(
-        "--theme",
-        default="dark",
-        choices=["dark", "light", "minimal"]
-    )
-    parser.add_argument(
-        "--size",
-        default="full",
-        choices=["compact", "full"]
-    )
-    parser.add_argument(
-        "--opacity",
+        "--alert",
         type=float,
-        default=0.92,
-        metavar="0.0-1.0"
+        metavar="PCT",
+        help="Exit with code 1 if session or weekly usage exceeds PCT%%",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress all output — only set exit code (useful with --alert)",
+    )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Send desktop notifications when quota exceeds threshold (requires plyer)",
+    )
+    parser.add_argument(
+        "--notify-threshold",
+        type=float,
+        default=80.0,
+        metavar="PCT",
+        help="Threshold for desktop notifications in %% (default: 80, requires --notify)",
+    )
+    parser.add_argument("--widget", action="store_true", help="Launch desktop widget")
+    parser.add_argument("--theme", default="dark", choices=["dark", "light", "minimal"])
+    parser.add_argument("--size", default="full", choices=["compact", "full"])
+    parser.add_argument("--opacity", type=float, default=0.92, metavar="0.0-1.0")
     parser.add_argument(
         "--position",
         default="top-left",
-        choices=["top-left", "top-right", "bottom-left", "bottom-right"]
+        choices=["top-left", "top-right", "bottom-left", "bottom-right"],
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logs"
-    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logs")
     args = parser.parse_args()
 
     if _HAS_COLOR:
@@ -212,7 +218,7 @@ def main():
         if args.debug:
             logging.basicConfig(
                 level=logging.DEBUG,
-                format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+                format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             )
 
         interval = max(10, min(3600, args.interval))
@@ -243,6 +249,7 @@ def main():
 
         if args.widget:
             from ollama_usage.widget import launch_widget
+
             launch_widget(
                 cookie=cookie if args.cookie else get_current_cookie,
                 interval=interval,
@@ -272,19 +279,29 @@ def main():
                             raise SystemExit(1)
                         else:
                             try:
-                                logger.info("Cookie expired/invalid. Attempting auto-refresh...")
+                                logger.info(
+                                    "Cookie expired/invalid. Attempting auto-refresh..."
+                                )
                                 cookie = get_current_cookie()
                                 data = get_usage(cookie)
                                 display(data, args.json, args.quiet)
                                 if args.notify:
-                                    check_and_notify(data, args.notify_threshold, notify_state)
+                                    check_and_notify(
+                                        data, args.notify_threshold, notify_state
+                                    )
                                 if _check_alert(data, args.alert, args.quiet):
                                     alert_triggered = True
                             except Exception as refresh_err:
-                                print(f"Cookie auto-refresh failed: {refresh_err}", file=sys.stderr)
+                                print(
+                                    f"Cookie auto-refresh failed: {refresh_err}",
+                                    file=sys.stderr,
+                                )
                                 raise SystemExit(1)
                     except NetworkError as e:
-                        print(f"Network error: {e} — retrying in {interval}s", file=sys.stderr)
+                        print(
+                            f"Network error: {e} — retrying in {interval}s",
+                            file=sys.stderr,
+                        )
                     _watch_countdown(interval)
             except KeyboardInterrupt:
                 print("\nStopped.")
