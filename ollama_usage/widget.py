@@ -352,16 +352,22 @@ class OllamaWidget:
             return
 
         y = p + 20
-        for label, pct in [
-            ("Session", self._data["session"]["used_pct"]),
-            ("Weekly",  self._data["weekly"]["used_pct"]),
-        ]:
+        rows = [("Session", self._data["session"]["used_pct"]),
+                ("Weekly",  self._data["weekly"]["used_pct"])]
+        for label, pct in rows:
             color = _pct_color(pct, t)
             c.create_text(p,     y, text=f"{label}:", anchor="nw",
                           fill=t["sub"], font=(_FONT, 9))
             c.create_text(w - p, y, text=f"{pct:.1f}%", anchor="ne",
                           fill=color, font=(_FONT, 9, "bold"))
             y += 16
+
+        ws = self._data.get("web_search_requests")
+        if ws is not None:
+            c.create_text(p,     y, text="Web search:", anchor="nw",
+                          fill=t["sub"], font=(_FONT, 9))
+            c.create_text(w - p, y, text=f"{ws} req", anchor="ne",
+                          fill=t["sub"], font=(_FONT, 9))
 
     def _draw_full(self) -> None:
         c, t   = self._canvas, self._theme
@@ -415,6 +421,11 @@ class OllamaWidget:
             c.create_text(bar_x, y, text=f"resets in {_fmt_countdown(secs)}",
                           anchor="nw", fill=t["sub"], font=(_FONT, 8))
             y += 28
+
+        ws = self._data.get("web_search_requests")
+        if ws is not None:
+            c.create_text(bar_x, y, text=f"Web search: {ws} request{'s' if ws != 1 else ''}",
+                          anchor="nw", fill=t["sub"], font=(_FONT, 8))
 
     # ---------------------------------------------------------------- run
 
