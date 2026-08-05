@@ -82,10 +82,13 @@ ollama-usage --help
 
 ### Example output
 ```
-Plan    : free
-Session : 0.0% used — resets at 2026-04-04T17:00:00Z
-Weekly  : 33.3% used — resets at 2026-04-06T00:00:00Z
+Plan    : pro
+Session : 2.6% used — resets at 2026-08-05T20:00:00Z
+Weekly  : 1.9% used — resets at 2026-08-10T00:00:00Z
+WebSearch: 2 requests
 ```
+
+The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). It only appears when your account has used web search — otherwise the line is omitted.
 
 Session and weekly percentages are color-coded in the terminal:
 - 🟢 Green — below 50%
@@ -94,23 +97,26 @@ Session and weekly percentages are color-coded in the terminal:
 
 ```json
 {
-  "plan": "free",
+  "plan": "pro",
   "session": {
-    "used_pct": 0.0,
-    "resets_at": "2026-04-04T00:00:00Z"
+    "used_pct": 2.6,
+    "resets_at": "2026-08-05T20:00:00Z"
   },
   "weekly": {
-    "used_pct": 33.3,
-    "resets_at": "2026-04-06T00:00:00Z"
-  }
+    "used_pct": 1.9,
+    "resets_at": "2026-08-10T00:00:00Z"
+  },
+  "web_search_requests": 2
 }
 ```
+
+`web_search_requests` is the total number of web search requests on the page, or `null` when none are present.
 
 ---
 
 ## Alert & scripting
 
-`--alert PCT` exits with code 1 if session **or** weekly usage exceeds `PCT%`.  
+`--alert PCT` exits with code 1 if session, weekly **or** web search usage exceeds `PCT%`.  
 Combine with `--quiet` to suppress all output and use only the exit code.
 
 ```bash
@@ -127,7 +133,7 @@ fi
 
 ## Desktop notifications
 
-`--notify` sends a native desktop notification when session **or** weekly usage crosses a threshold.  
+`--notify` sends a native desktop notification when session, weekly **or** web search usage crosses a threshold.  
 Requires the `notify` extra: `pip install "ollama-usage[notify] @ git+https://..."`
 
 Two levels are fired automatically:
@@ -161,6 +167,7 @@ usage = get_usage(cookie)
 print(usage["plan"])                        # "free"
 print(usage["session"]["used_pct"])         # 0.0
 print(usage["weekly"]["resets_at"])         # "2026-04-06T00:00:00Z"
+print(usage["web_search_requests"])         # None or an int like 2
 ```
 
 ### Error handling
@@ -231,6 +238,7 @@ Allow access to continue.
 - [x] `--alert` and `--quiet` for scripting
 - [x] Desktop notifications with `--notify`
 - [x] Environment variable support (`OLLAMA_BROWSER_COOKIE`)
+- [x] Web search usage statistics
 - [ ] Safari support
 - [ ] Migrate to official `/api/me` when available ([#12532](https://github.com/ollama/ollama/issues/12532))
 

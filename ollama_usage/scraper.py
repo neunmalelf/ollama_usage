@@ -21,6 +21,17 @@ _PLAN_RE = re.compile(r'capitalize[^>]*>\s*(\w+)\s*</')
 _PERCENT_RE = re.compile(r'([\d.]+)%\s*used')
 _TIME_RE = re.compile(r'data-time="([^"]+)"')
 
+# Section markers (case-insensitive).
+_SESSION_MARKER = "session usage"
+_WEEKLY_MARKER = "weekly usage"
+
+# Web search is not a % quota — it is shown as a request-count segment inside
+# the usage meters, e.g. <button ... data-model="web search" data-requests="2" />.
+_WEB_SEARCH_SEGMENT_RE = re.compile(
+    r'data-usage-segment[^>]*data-model="web search"[^>]*data-requests="(\d+)"',
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class PeriodUsage:
@@ -33,18 +44,19 @@ class UsageData:
     plan: str
     session: PeriodUsage
     weekly: PeriodUsage
+    web_search_requests: int | None = None
 
     def to_dict(self) -> dict:
+        def _period(p: PeriodUsage | None) -> dict | None:
+            if p is None:
+                return None
+            return {"used_pct": p.used_pct, "resets_at": p.resets_at}
+
         return {
             "plan": self.plan,
-            "session": {
-                "used_pct": self.session.used_pct,
-                "resets_at": self.session.resets_at,
-            },
-            "weekly": {
-                "used_pct": self.weekly.used_pct,
-                "resets_at": self.weekly.resets_at,
-            },
+            "session": _period(self.session),
+            "weekly": _period(self.weekly),
+            "web_search_requests": self.web_search_requests,
         }
 
 
@@ -99,15 +111,15 @@ def _extract_plan(html: str) -> str:
 
 def _extract_usage(html: str) -> tuple[float, float, str, str]:
     """Extract session and weekly usage from labeled sections in HTML.
-    
+
     This function is section-aware and does not depend on order.
     It finds each usage section by its label and extracts the corresponding
     percentage and reset time from within that section.
     """
     # Find positions of each section marker
-    session_pos = html.lower().find("session usage")
-    weekly_pos = html.lower().find("weekly usage")
-    
+    session_pos = html.lower().find(_SESSION_MARKER)
+    weekly_pos = html.lower().find(_WEEKLY_MARKER)
+
     if session_pos == -1 and weekly_pos == -1:
         # Fallback to position-based extraction if sections not found
         matches = _PERCENT_RE.findall(html)
@@ -117,7 +129,7 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
         if len(times) < 2:
             raise ParseError(f"Expected 2 reset timestamps, found {len(times)}.")
         return float(matches[0]), float(matches[1]), times[0], times[1]
-    
+
     # Extract percentage and time after each section marker
     def extract_after(pos: int, label: str) -> tuple[float, str]:
         # Find the next "% used" after this position using pos parameter (no slicing)
@@ -129,16 +141,29 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
         if not time_match:
             raise ParseError(f"Could not find {label} reset time.")
         return float(pct_match.group(1)), time_match.group(1)
-    
+
     if session_pos == -1:
         raise ParseError("Could not find 'Session usage' section in HTML.")
     if weekly_pos == -1:
         raise ParseError("Could not find 'Weekly usage' section in HTML.")
-    
+
     session_pct, session_time = extract_after(session_pos, "session")
     weekly_pct, weekly_time = extract_after(weekly_pos, "weekly")
-    
+
     return session_pct, weekly_pct, session_time, weekly_time
+
+
+def _extract_web_search_requests(html: str) -> int | None:
+    """Extract the number of web search requests reported on the page.
+
+    Web search is rendered as a segment inside the usage meters with a
+    ``data-requests`` attribute. Returns the total (summed over all meters) or
+    None when no web search segment is present.
+    """
+    counts = _WEB_SEARCH_SEGMENT_RE.findall(html)
+    if not counts:
+        return None
+    return sum(int(c) for c in counts)
 
 
 def parse_html(html: str) -> dict:
@@ -146,12 +171,17 @@ def parse_html(html: str) -> dict:
     _check_auth(html)
     plan = _extract_plan(html)
     session_pct, weekly_pct, session_time, weekly_time = _extract_usage(html)
+    web_search_requests = _extract_web_search_requests(html)
     logger.debug("Parsing HTML...")
-    logger.debug("Parsed: plan=%s session=%.1f%% weekly=%.1f%%", plan, session_pct, weekly_pct)
+    logger.debug(
+        "Parsed: plan=%s session=%.1f%% weekly=%.1f%% web_search_requests=%s",
+        plan, session_pct, weekly_pct, web_search_requests,
+    )
     return UsageData(
         plan=plan,
         session=PeriodUsage(used_pct=session_pct, resets_at=session_time),
         weekly=PeriodUsage(used_pct=weekly_pct, resets_at=weekly_time),
+        web_search_requests=web_search_requests,
     ).to_dict()
 
 

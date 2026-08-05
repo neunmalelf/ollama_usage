@@ -53,11 +53,13 @@ class TestSanitizeCookie:
 # _check_alert — logique d'alerte quota
 # ---------------------------------------------------------------------------
 
-def make_data(session_pct: float = 0.0, weekly_pct: float = 0.0) -> dict:
+def make_data(session_pct: float = 0.0, weekly_pct: float = 0.0,
+              web_search_requests: int | None = None) -> dict:
     return {
         "plan": "free",
         "session": {"used_pct": session_pct, "resets_at": "2026-04-04T17:00:00Z"},
         "weekly":  {"used_pct": weekly_pct,  "resets_at": "2026-04-06T00:00:00Z"},
+        "web_search_requests": web_search_requests,
     }
 
 
@@ -120,6 +122,17 @@ class TestDisplay:
         out = capsys.readouterr().out
         assert "42.0" in out
         assert "77.0" in out
+
+    def test_text_output_omits_web_search_when_absent(self, capsys) -> None:
+        display(make_data(), as_json=False, quiet=False)
+        out = capsys.readouterr().out
+        assert "WebSearch" not in out
+
+    def test_text_output_shows_web_search_count_when_present(self, capsys) -> None:
+        display(make_data(web_search_requests=2), as_json=False, quiet=False)
+        out = capsys.readouterr().out
+        assert "WebSearch" in out
+        assert "2" in out
 
 
 # ---------------------------------------------------------------------------

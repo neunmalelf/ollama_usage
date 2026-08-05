@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Web search request count parsed from `ollama.com/settings`
+- `web_search_requests` field in `get_usage()` output (`null` when no web search usage present)
+- Web search request count shown in CLI text output, JSON, and desktop widget
+
 ## [0.1.1] - 2026-04-26
 
 ### Fixed

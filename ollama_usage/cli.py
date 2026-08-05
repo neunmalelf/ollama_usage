@@ -107,14 +107,17 @@ def display(data: dict, as_json: bool, quiet: bool) -> None:
     else:
         plan = data['plan']
         if _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ:
-            plan = f"{Fore.CYAN}{plan}{Style.RESET_ALL}"
-        print(f"Plan    : {plan}")
+            plan = f"{Fore.CYAN} {plan}{Style.RESET_ALL}"
+        print(f"Plan     :  {plan}")
         print(
-            f"Session : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'])}"
+            f"Session  : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'])}"
         )
         print(
-            f"Weekly  : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'])}"
+            f"Weekly   : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'])}"
         )
+        web_search = data.get("web_search_requests")
+        if web_search is not None:
+            print(f"WebSearch:   {Fore.CYAN}{web_search}{Style.RESET_ALL} request{'s' if web_search != 1 else ''}")
 
 
 def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
