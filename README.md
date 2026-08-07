@@ -1,8 +1,8 @@
-# ollama-usage
+# ollama_usage
 
 > Programmatic access to your [Ollama Cloud](https://ollama.com) usage quota — until an official API exists.
 
-![CI](https://github.com/florian-croiset/ollama-usage/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/neunmalelf/ollama_usage/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -15,12 +15,12 @@ This library fills that gap by reading your session cookie and scraping `ollama.
 
 ## Installation
 ```bash
-pip install git+https://github.com/florian-croiset/ollama-usage
+pip install git+https://github.com/neunmalelf/ollama_usage
 ```
 
 ### With desktop notifications support
 ```bash
-pip install "ollama-usage[notify] @ git+https://github.com/florian-croiset/ollama-usage"
+pip install "ollama-usage[notify] @ git+https://github.com/neunmalelf/ollama_usage"
 ```
 ---
 
@@ -82,18 +82,25 @@ ollama-usage --help
 
 ### Example output
 ```
-Plan    : pro
-Session : 2.6% used — resets at 2026-08-05T20:00:00Z
-Weekly  : 1.9% used — resets at 2026-08-10T00:00:00Z
-WebSearch: 2 requests
+Plan     :  pro
+Session  :   2.6% used - reset at 2026-08-05T20:00:00Z (in  2h 42m)
+Weekly   :   1.9% used - reset at 2026-08-10T00:00:00Z (in  4d 6h 42m)
+WebSearch:      2 requests
+Model calls this week:
+                2 glm-5.2
+                2 web search
+              382 deepseek-v4-flash:0731
+               60 deepseek-v4-flash
 ```
 
-The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). It only appears when your account has used web search — otherwise the line is omitted.
+The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `Models used this week:` section lists per-model request counts. Both only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 
-Session and weekly percentages are color-coded in the terminal:
-- 🟢 Green — below 50%
-- 🟡 Yellow — between 50% and 80%
-- 🔴 Red — above 80%
+Terminal colors (ANSI, self-contained — no external dependency):
+- Plan name — **orange**
+- Session and weekly percentages — **green** (<50%), **yellow** (50–80%), **red** (>80%)
+- WebSearch count and model request numbers — **cyan**
+- "Model calls this week:" header — **grey**
+- Reset countdown — the **days** number in **yellow**, the **hours** number in **cyan**, the **minutes** number in **magenta**, and the `d` / `h` / `m` unit labels in **white** (for both Session and Weekly)
 
 ```json
 {
@@ -106,11 +113,17 @@ Session and weekly percentages are color-coded in the terminal:
     "used_pct": 1.9,
     "resets_at": "2026-08-10T00:00:00Z"
   },
-  "web_search_requests": 2
+  "web_search_requests": 2,
+  "models": [
+    {"name": "glm-5.2", "requests": 2},
+    {"name": "web search", "requests": 2},
+    {"name": "deepseek-v4-flash:0731", "requests": 382},
+    {"name": "deepseek-v4-flash", "requests": 60}
+  ]
 }
 ```
 
-`web_search_requests` is the total number of web search requests on the page, or `null` when none are present.
+`web_search_requests` is the total number of web search requests on the page. `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). Both are `null` when absent.
 
 ---
 
@@ -134,7 +147,7 @@ fi
 ## Desktop notifications
 
 `--notify` sends a native desktop notification when session, weekly **or** web search usage crosses a threshold.  
-Requires the `notify` extra: `pip install "ollama-usage[notify] @ git+https://..."`
+Requires the `notify` extra: `pip install "ollama-usage[notify] @ git+https://github.com/neunmalelf/ollama_usage"`
 
 Two levels are fired automatically:
 - ⚠️ **Warning** — at the configured threshold (default: 80%)
@@ -168,6 +181,7 @@ print(usage["plan"])                        # "free"
 print(usage["session"]["used_pct"])         # 0.0
 print(usage["weekly"]["resets_at"])         # "2026-04-06T00:00:00Z"
 print(usage["web_search_requests"])         # None or an int like 2
+print(usage["models"])                      # None or [{"name": ..., "requests": ...}, ...]
 ```
 
 ### Error handling
@@ -260,4 +274,4 @@ MIT — see [LICENSE](LICENSE).
 
 This project is not affiliated with Ollama.  
 It relies on scraping and may break if Ollama changes their HTML structure.  
-If it breaks, please [open an issue](https://github.com/florian-croiset/ollama-usage/issues).
+If it breaks, please [open an issue](https://github.com/neunmalelf/ollama_usage/issues).
