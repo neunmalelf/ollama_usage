@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [
-    { name = "ollama-usage contributors" }
+    { name = "neunmalelf" }
 ]
 keywords = ["ollama", "quota", "usage", "cli", "llm"]
 classifiers = [
@@ -27,7 +27,6 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "colorama",
     "cryptography",
     "pywin32; sys_platform == 'win32'",
 ]
@@ -37,10 +36,10 @@ notify = ["plyer"]
 dev    = ["pytest", "pytest-cov", "plyer"]
 
 [project.urls]
-Homepage = "https://github.com/florian-croiset/ollama-usage"
-Repository = "https://github.com/florian-croiset/ollama-usage"
-"Bug Tracker" = "https://github.com/florian-croiset/ollama-usage/issues"
-Changelog = "https://github.com/florian-croiset/ollama-usage/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/neunmalelf/ollama_usage"
+Repository = "https://github.com/neunmalelf/ollama_usage"
+"Bug Tracker" = "https://github.com/neunmalelf/ollama_usage/issues"
+Changelog = "https://github.com/neunmalelf/ollama_usage/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ollama-usage = "ollama_usage.cli:main"
