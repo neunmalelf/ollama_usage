@@ -6,7 +6,7 @@ import os
 import platform
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from importlib.metadata import version as get_version
 from typing import Optional
 
@@ -224,6 +224,47 @@ def _watch_countdown(interval: int) -> None:
     sys.stdout.flush()
 
 
+def _autorefresh_footer(interval: int) -> None:
+    """Print the autorefresh footer: current time and next refresh time.
+
+    Format: ``YYYY-MM-DD hh-mm-ss  next refresh in <N> seconds at YYYY-MM-DD hh-mm-ss``
+    The next-refresh timestamp is shown in cyan (blue on a black background).
+    """
+    now = datetime.now()
+    next_time = now + timedelta(seconds=interval)
+    now_str = now.strftime("%Y-%m-%d %H-%M-%S")
+    next_str = next_time.strftime("%Y-%m-%d %H-%M-%S")
+    use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
+    if use_color:
+        next_colored = _ANSI["cyan"] + next_str + _ANSI["reset"]
+    else:
+        next_colored = next_str
+    print(f"{now_str}  next refresh in {interval} seconds at {next_colored}")
+
+
+def _autorefresh_sleep(interval: int) -> None:
+    """Sleep for ``interval`` seconds, printing a countdown footer."""
+    if not sys.stdout.isatty():
+        time.sleep(interval)
+        return
+    for remaining in range(interval, 0, -1):
+        sys.stdout.write(
+            f"\rnext refresh in {remaining:>4} seconds at "
+            f"{_next_refresh_str(interval)}  "
+        )
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+
+
+def _next_refresh_str(interval: int) -> str:
+    """Return the next-refresh timestamp as ``YYYY-MM-DD hh-mm-ss``."""
+    return (datetime.now() + timedelta(seconds=interval)).strftime(
+        "%Y-%m-%d %H-%M-%S"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Display your Ollama Cloud quota usage"
@@ -237,6 +278,16 @@ def main():
         "--browser", type=str, choices=BROWSERS.keys(), help="Force a specific browser"
     )
     parser.add_argument("--watch", action="store_true", help="Refresh continuously")
+    parser.add_argument(
+        "--autorefresh",
+        nargs="?",
+        type=int,
+        const=120,
+        default=None,
+        metavar="SECONDS",
+        help="Refresh continuously every SECONDS seconds (default: 120). "
+        "Shows a timestamp footer with the next refresh time.",
+    )
     parser.add_argument(
         "--interval",
         type=int,
@@ -338,6 +389,55 @@ def main():
                 position=args.position,
             )
             return
+
+        if args.autorefresh is not None:
+            auto_interval = max(1, args.autorefresh)
+            try:
+                while True:
+                    sys.stdout.write("\033[2J\033[H")
+                    sys.stdout.flush()
+                    try:
+                        data = get_usage(cookie)
+                        display(data, args.json, args.quiet)
+                        if args.notify:
+                            check_and_notify(
+                                data, args.notify_threshold, notify_state
+                            )
+                        if _check_alert(data, args.alert, args.quiet):
+                            alert_triggered = True
+                    except AuthError as e:
+                        if args.cookie:
+                            print(f"Error: {e}", file=sys.stderr)
+                            raise SystemExit(1)
+                        else:
+                            try:
+                                logger.info(
+                                    "Cookie expired/invalid. Attempting auto-refresh..."
+                                )
+                                cookie = get_current_cookie()
+                                data = get_usage(cookie)
+                                display(data, args.json, args.quiet)
+                                if args.notify:
+                                    check_and_notify(
+                                        data, args.notify_threshold, notify_state
+                                    )
+                                if _check_alert(data, args.alert, args.quiet):
+                                    alert_triggered = True
+                            except Exception as refresh_err:
+                                print(
+                                    f"Cookie auto-refresh failed: {refresh_err}",
+                                    file=sys.stderr,
+                                )
+                                raise SystemExit(1)
+                    except NetworkError as e:
+                        print(
+                            f"Network error: {e} — retrying in {auto_interval}s",
+                            file=sys.stderr,
+                        )
+                    _autorefresh_footer(auto_interval)
+                    _autorefresh_sleep(auto_interval)
+            except KeyboardInterrupt:
+                print("\nStopped.")
 
         if args.watch:
             try:

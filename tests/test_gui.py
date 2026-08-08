@@ -14,6 +14,9 @@ from ollama_usage.gui import (
     _save_geometry,
     _load_darkmode,
     _save_darkmode,
+    _load_autorefresh,
+    _save_autorefresh,
+    _DEFAULT_AUTOREFRESH,
     _theme_colors,
     _DEFAULT_GEOMETRY,
     COLORS,
@@ -267,6 +270,9 @@ def _make_gui(data: dict | None = None, error: str | None = None,
     fake_frame = MagicMock()
     fake_check = MagicMock()
     fake_bool = MagicMock()
+    fake_label = MagicMock()
+    fake_entry = MagicMock()
+    fake_string = MagicMock()
 
     def _load_dark():
         return bool(dark) if dark is not None else False
@@ -277,26 +283,30 @@ def _make_gui(data: dict | None = None, error: str | None = None,
          patch("ollama_usage.gui.tk.Frame", return_value=fake_frame), \
          patch("ollama_usage.gui.tk.Checkbutton", return_value=fake_check) as check_mock, \
          patch("ollama_usage.gui.tk.BooleanVar", return_value=fake_bool), \
+         patch("ollama_usage.gui.tk.Label", return_value=fake_label), \
+         patch("ollama_usage.gui.tk.Entry", return_value=fake_entry), \
+         patch("ollama_usage.gui.tk.StringVar", return_value=fake_string) as string_mock, \
          patch("ollama_usage.gui._load_geometry", return_value=None), \
-         patch("ollama_usage.gui._load_darkmode", side_effect=_load_dark):
+         patch("ollama_usage.gui._load_darkmode", side_effect=_load_dark), \
+         patch("ollama_usage.gui._load_autorefresh", return_value=120):
         from ollama_usage.gui import OllamaGui
         gui = OllamaGui(cookie="fake-cookie")
         gui._data = data
         gui._error = error
-        return gui, fake_root, fake_text, btn_mock, check_mock
+        return gui, fake_root, fake_text, btn_mock, check_mock, string_mock
 
 
 class TestOllamaGui:
 
     def test_title_contains_app_name_and_version(self) -> None:
         from ollama_usage import __version__
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         expected = f"{APP_NAME} ({__version__})"
         fake_root.title.assert_called_once_with(expected)
 
     def test_icon_set_from_ico_file(self) -> None:
         import ollama_usage.gui as gui_mod
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         # _set_icon is called during __init__; verify iconbitmap was invoked
         # with the icon path when the file exists.
         if gui_mod._ICON_PATH.is_file():
@@ -305,20 +315,20 @@ class TestOllamaGui:
             fake_root.iconbitmap.assert_not_called()
 
     def test_ok_button_quits(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch("ollama_usage.gui.sys.exit") as mock_exit:
             gui._quit()
         fake_root.destroy.assert_called_once()
         mock_exit.assert_called_once_with(0)
 
     def test_refresh_button_triggers_fetch(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch.object(gui, "_fetch_async") as mock_fetch:
             gui._refresh()
         mock_fetch.assert_called_once()
 
     def test_redraw_inserts_built_lines(self) -> None:
-        gui, fake_root, fake_text, _, _ = _make_gui(
+        gui, fake_root, fake_text, _, _, _ = _make_gui(
             data=make_data(session_pct=2.6, weekly_pct=1.9)
         )
         fake_text.index.return_value = "1.0"
@@ -329,14 +339,14 @@ class TestOllamaGui:
         assert "1.9%" in inserted
 
     def test_redraw_shows_error(self) -> None:
-        gui, fake_root, fake_text, _, _ = _make_gui(error="Network error")
+        gui, fake_root, fake_text, _, _, _ = _make_gui(error="Network error")
         fake_text.index.return_value = "1.0"
         gui._redraw()
         inserted = "".join(c.args[1] for c in fake_text.insert.call_args_list)
         assert "Network error" in inserted
 
     def test_redraw_applies_color_tags(self) -> None:
-        gui, fake_root, fake_text, _, _ = _make_gui(
+        gui, fake_root, fake_text, _, _, _ = _make_gui(
             data=make_data(session_pct=2.6, weekly_pct=1.9)
         )
         fake_text.index.return_value = "1.0"
@@ -345,7 +355,7 @@ class TestOllamaGui:
         assert fake_text.tag_add.called
 
     def test_fetch_success_updates_data_and_schedules_redraw(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         data = make_data()
         with patch("ollama_usage.gui.get_usage", return_value=data):
             gui._fetch()
@@ -357,14 +367,14 @@ class TestOllamaGui:
 
     def test_fetch_network_error_sets_error(self) -> None:
         from ollama_usage.exceptions import NetworkError
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch("ollama_usage.gui.get_usage", side_effect=NetworkError("down")):
             gui._fetch()
         assert gui._error == "Network error"
 
     def test_fetch_auth_error_refreshes_cookie(self) -> None:
         from ollama_usage.exceptions import AuthError
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         data = make_data()
         with patch("ollama_usage.gui.get_usage", side_effect=[AuthError("expired"), data]):
             gui._fetch()
@@ -372,7 +382,7 @@ class TestOllamaGui:
         assert gui._error is None
 
     def test_buttons_have_equal_width(self) -> None:
-        gui, fake_root, _, fake_button, _ = _make_gui()
+        gui, fake_root, _, fake_button, _, _ = _make_gui()
         # Both buttons are created with the same width option.
         widths = []
         for call in fake_button.call_args_list:
@@ -383,7 +393,7 @@ class TestOllamaGui:
         assert widths[0] == widths[1] == 10
 
     def test_refresh_button_has_underlined_r(self) -> None:
-        gui, fake_root, _, fake_button, _ = _make_gui()
+        gui, fake_root, _, fake_button, _, _ = _make_gui()
         refresh_kwargs = None
         for call in fake_button.call_args_list:
             if call.kwargs.get("text") == "Refresh":
@@ -392,7 +402,7 @@ class TestOllamaGui:
         assert refresh_kwargs.get("underline") == 0
 
     def test_ok_button_has_underlined_o(self) -> None:
-        gui, fake_root, _, fake_button, _ = _make_gui()
+        gui, fake_root, _, fake_button, _, _ = _make_gui()
         ok_kwargs = None
         for call in fake_button.call_args_list:
             if call.kwargs.get("text") == "OK":
@@ -401,31 +411,31 @@ class TestOllamaGui:
         assert ok_kwargs.get("underline") == 0
 
     def test_alt_r_triggers_refresh(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch.object(gui, "_refresh") as mock_refresh:
             gui._on_refresh_key(None)
         mock_refresh.assert_called_once()
 
     def test_alt_o_triggers_quit(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch.object(gui, "_quit") as mock_quit:
             gui._on_quit_key(None)
         mock_quit.assert_called_once()
 
     def test_enter_triggers_quit(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch.object(gui, "_quit") as mock_quit:
             gui._on_quit_key(None)
         mock_quit.assert_called_once()
 
     def test_escape_binding_registered(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         # The Escape key is bound to the quit handler.
         bound = [c.args[0] for c in fake_root.bind.call_args_list]
         assert "<Escape>" in bound
 
     def test_quit_saves_geometry(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         fake_root.geometry.return_value = "560x300+10+10"
         with patch("ollama_usage.gui._save_geometry") as mock_save, \
              patch("ollama_usage.gui.sys.exit"):
@@ -433,7 +443,7 @@ class TestOllamaGui:
         mock_save.assert_called_once_with("560x300+10+10")
 
     def test_geometry_restored_from_state(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         # _load_geometry is patched to return None in _make_gui, so geometry
         # falls back to the default. Verify the default is applied.
         fake_root.geometry.assert_called_once_with(_DEFAULT_GEOMETRY)
@@ -501,18 +511,18 @@ class TestDarkMode:
         assert _theme_colors(False)["grey"] != COLORS["grey"]
 
     def test_gui_default_light_background(self) -> None:
-        gui, fake_root, fake_text, _, _ = _make_gui()
+        gui, fake_root, fake_text, _, _, _ = _make_gui()
         # Light mode: white background, black foreground.
         assert gui._bg == "#ffffff"
         assert gui._fg == "#000000"
 
     def test_gui_dark_background(self) -> None:
-        gui, fake_root, fake_text, _, _ = _make_gui(dark=True)
+        gui, fake_root, fake_text, _, _, _ = _make_gui(dark=True)
         assert gui._bg == "#000000"
         assert gui._fg == "#ffffff"
 
     def test_toggle_dark_updates_colors_and_saves(self) -> None:
-        gui, fake_root, fake_text, _, _ = _make_gui()
+        gui, fake_root, fake_text, _, _, _ = _make_gui()
         gui._dark_var.get.return_value = True
         with patch("ollama_usage.gui._save_darkmode") as mock_save, \
              patch.object(gui, "_redraw") as mock_redraw:
@@ -525,7 +535,7 @@ class TestDarkMode:
         fake_text.tag_configure.assert_called()
 
     def test_quit_saves_darkmode(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         with patch("ollama_usage.gui._save_darkmode") as mock_save, \
              patch("ollama_usage.gui._save_geometry"), \
              patch("ollama_usage.gui.sys.exit"):
@@ -533,7 +543,7 @@ class TestDarkMode:
         mock_save.assert_called_once_with(gui._dark)
 
     def test_darkmode_checkbox_has_underlined_d(self) -> None:
-        gui, fake_root, _, _, check_mock = _make_gui()
+        gui, fake_root, _, _, check_mock, _ = _make_gui()
         # The Checkbutton is created with underline=0 (underlines the 'd').
         check_kwargs = None
         for call in check_mock.call_args_list:
@@ -543,9 +553,61 @@ class TestDarkMode:
         assert check_kwargs.get("underline") == 0
 
     def test_alt_d_toggles_darkmode(self) -> None:
-        gui, fake_root, _, _, _ = _make_gui()
+        gui, fake_root, _, _, _, _ = _make_gui()
         gui._dark_var.get.return_value = False
         with patch.object(gui, "_toggle_dark") as mock_toggle:
             gui._on_dark_key(None)
         gui._dark_var.set.assert_called_once_with(True)
         mock_toggle.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Autorefresh
+# ---------------------------------------------------------------------------
+
+class TestAutorefresh:
+
+    def test_default_is_120(self) -> None:
+        assert _DEFAULT_AUTOREFRESH == 120
+
+    def test_load_default_when_missing(self, tmp_path, monkeypatch) -> None:
+        import ollama_usage.gui as gui_mod
+        state_file = tmp_path / "missing.json"
+        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
+        assert _load_autorefresh() == 120
+
+    def test_save_then_load_roundtrip(self, tmp_path, monkeypatch) -> None:
+        import ollama_usage.gui as gui_mod
+        state_file = tmp_path / "state.json"
+        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
+        _save_autorefresh(1200)
+        assert _load_autorefresh() == 1200
+
+    def test_save_clamps_to_min_1(self, tmp_path, monkeypatch) -> None:
+        import ollama_usage.gui as gui_mod
+        state_file = tmp_path / "state.json"
+        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
+        _save_autorefresh(0)
+        assert _load_autorefresh() == 1
+
+    def test_gui_field_initialized_from_state(self) -> None:
+        gui, fake_root, _, _, _, string_mock = _make_gui()
+        # The StringVar is created with the loaded autorefresh value (120).
+        kwargs = string_mock.call_args.kwargs
+        assert kwargs.get("value") == "120"
+
+    def test_save_autorefresh_from_field(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        gui._autorefresh_var.get.return_value = "1200"
+        with patch("ollama_usage.gui._save_autorefresh") as mock_save:
+            gui._save_autorefresh_from_field()
+        mock_save.assert_called_once_with(1200)
+
+    def test_quit_saves_autorefresh(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        with patch.object(gui, "_save_autorefresh_from_field") as mock_save, \
+             patch("ollama_usage.gui._save_geometry"), \
+             patch("ollama_usage.gui._save_darkmode"), \
+             patch("ollama_usage.gui.sys.exit"):
+            gui._quit()
+        mock_save.assert_called_once()

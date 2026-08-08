@@ -338,6 +338,25 @@ def _save_darkmode(dark: bool) -> None:
     _save_state(state)
 
 
+#: Default autorefresh interval in seconds.
+_DEFAULT_AUTOREFRESH = 120
+
+
+def _load_autorefresh() -> int:
+    """Return the saved autorefresh interval in seconds (default: 120)."""
+    value = _load_state().get("autorefresh")
+    if isinstance(value, int) and value > 0:
+        return value
+    return _DEFAULT_AUTOREFRESH
+
+
+def _save_autorefresh(seconds: int) -> None:
+    """Persist the autorefresh interval in seconds."""
+    state = _load_state()
+    state["autorefresh"] = max(1, int(seconds))
+    _save_state(state)
+
+
 # ---------------------------------------------------------------------------
 # GUI window
 # ---------------------------------------------------------------------------
@@ -405,6 +424,19 @@ class OllamaGui:
         )
         self._dark_ck.pack(side="left", padx=4)
 
+        # Autorefresh interval field (seconds) between darkmode and OK.
+        self._autorefresh_var = tk.StringVar(value=str(_load_autorefresh()))
+        self._autorefresh_lbl = tk.Label(
+            buttons, text="autorefresh (s):", bg=self._bg, fg=self._fg
+        )
+        self._autorefresh_lbl.pack(side="left", padx=(8, 2))
+        self._autorefresh_entry = tk.Entry(
+            buttons, textvariable=self._autorefresh_var, width=8, justify="right",
+            bg=self._bg, fg=self._fg, insertbackground=self._fg,
+        )
+        self._autorefresh_entry.pack(side="left", padx=2)
+        self._autorefresh_entry.bind("<Return>", self._on_autorefresh_enter)
+
         self._ok_btn = tk.Button(
             buttons, text="OK", underline=0, width=10, command=self._quit,
             bg=self._bg, fg=self._fg, activebackground=self._bg, activeforeground=self._fg,
@@ -450,6 +482,18 @@ class OllamaGui:
         self._toggle_dark()
         return "break"
 
+    def _on_autorefresh_enter(self, _event: tk.Event) -> str:
+        self._save_autorefresh_from_field()
+        return "break"
+
+    def _save_autorefresh_from_field(self) -> None:
+        """Read the autorefresh field and persist it (best-effort)."""
+        try:
+            seconds = int(self._autorefresh_var.get().strip())
+        except (ValueError, AttributeError):
+            seconds = _DEFAULT_AUTOREFRESH
+        _save_autorefresh(seconds)
+
     # ---------------------------------------------------------------- theme
 
     def _toggle_dark(self) -> None:
@@ -465,11 +509,13 @@ class OllamaGui:
         for name, hex_color in self._colors.items():
             self._text.tag_configure(name, foreground=hex_color)
 
-        for widget in (self._refresh_btn, self._ok_btn, self._dark_ck):
+        for widget in (self._refresh_btn, self._ok_btn, self._dark_ck,
+                       self._autorefresh_lbl, self._autorefresh_entry):
             widget.configure(
                 bg=self._bg, fg=self._fg,
                 activebackground=self._bg, activeforeground=self._fg,
             )
+        self._autorefresh_entry.configure(insertbackground=self._fg)
         self._dark_ck.configure(selectcolor=self._bg)
         self._refresh_btn.master.configure(bg=self._bg)
         self._redraw()
@@ -526,6 +572,10 @@ class OllamaGui:
             pass
         try:
             _save_darkmode(self._dark)
+        except Exception:
+            pass
+        try:
+            self._save_autorefresh_from_field()
         except Exception:
             pass
         try:
