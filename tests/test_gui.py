@@ -167,6 +167,21 @@ class TestBuildSegments:
         model_line = next(l for l in segs if "glm-5.2" in _seg_text(l))
         assert _seg_color(model_line, "2") == "cyan"
 
+    def test_models_sorted_by_requests_descending(self) -> None:
+        models = [
+            {"name": "low", "requests": 2},
+            {"name": "high", "requests": 382},
+            {"name": "mid", "requests": 60},
+        ]
+        segs = build_segments(make_data(models=models))
+        model_lines = [l for l in segs if "glm" not in _seg_text(l) and "Model" not in _seg_text(l) and _seg_text(l).strip()]
+        names = []
+        for line in model_lines:
+            text = _seg_text(line)
+            if any(name in text for name in ("low", "high", "mid")):
+                names.append(text.split()[-1])
+        assert names == ["high", "mid", "low"]
+
     def test_model_request_number_right_aligned(self) -> None:
         models = [{"name": "glm-5.2", "requests": 2}]
         segs = build_segments(make_data(models=models))
@@ -403,6 +418,12 @@ class TestOllamaGui:
             gui._on_quit_key(None)
         mock_quit.assert_called_once()
 
+    def test_escape_binding_registered(self) -> None:
+        gui, fake_root, _, _, _ = _make_gui()
+        # The Escape key is bound to the quit handler.
+        bound = [c.args[0] for c in fake_root.bind.call_args_list]
+        assert "<Escape>" in bound
+
     def test_quit_saves_geometry(self) -> None:
         gui, fake_root, _, _, _ = _make_gui()
         fake_root.geometry.return_value = "560x300+10+10"
@@ -468,6 +489,16 @@ class TestDarkMode:
         # On a light background, cyan is substituted with blue.
         assert _theme_colors(False)["cyan"] == "#0000ff"
         assert _theme_colors(False)["cyan"] != COLORS["cyan"]
+
+    def test_theme_colors_light_uses_darker_green(self) -> None:
+        # On a light background, green is darkened for contrast.
+        assert _theme_colors(False)["green"] == "#008000"
+        assert _theme_colors(False)["green"] != COLORS["green"]
+
+    def test_theme_colors_light_uses_darker_grey(self) -> None:
+        # On a light background, grey is darkened for contrast.
+        assert _theme_colors(False)["grey"] == "#404040"
+        assert _theme_colors(False)["grey"] != COLORS["grey"]
 
     def test_gui_default_light_background(self) -> None:
         gui, fake_root, fake_text, _, _ = _make_gui()
