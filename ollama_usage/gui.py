@@ -24,13 +24,17 @@ logger = logging.getLogger(__name__)
 
 APP_NAME = "ollama-usage"
 
+# Application icon (ICO). Resolved relative to the package directory so it
+# works both from a source checkout and an installed package.
+_ICON_PATH = pathlib.Path(__file__).resolve().parent.parent / "icon.ico"
+
 # State file used to persist the window size and position between runs.
 _STATE_FILE = pathlib.Path.home() / ".ollama-usage-gui.json"
 
 # Default window geometry (width x height). The width is chosen so the
 # Session / Weekly lines (with their full ISO reset timestamps) are not
 # truncated or wrapped.
-_DEFAULT_GEOMETRY = "560x300"
+_DEFAULT_GEOMETRY = "640x300"
 _MIN_WIDTH = 360
 _MIN_HEIGHT = 200
 
@@ -151,21 +155,30 @@ def _pct_color_name(pct: float) -> str:
 def _countdown_segments(seconds: int) -> list[tuple[str, str | None]]:
     """Return the countdown text as colored segments (numbers + unit labels).
 
-    Matches the terminal: days number in yellow, hours in cyan, minutes in
-    magenta, and the unit letters in white.
+    The days, hours and minutes slots are each a fixed 3-character width so the
+    hours (and minutes) line up vertically between the Session and Weekly rows.
+    Days number is orange, hours number cyan, minutes number magenta; the
+    ``d``/``h``/``m`` unit labels are white.
     """
     if seconds <= 0:
         return [("now", None)]
-    h, rem = divmod(seconds, 3600)
-    m, s = divmod(rem, 60)
+    d, rem = divmod(seconds, 86400)
+    h, rem = divmod(rem, 3600)
+    m, _ = divmod(rem, 60)
     segs: list[tuple[str, str | None]] = []
-    if h:
-        segs.append((f"{h}h", "cyan"))
-        segs.append((" ", None))
-    if m:
-        segs.append((f"{m:02d}m", "magenta"))
-        segs.append((" ", None))
-    segs.append((f"{s}s", "white"))
+
+    def _slot(value: int, unit: str, color: str, show: bool) -> None:
+        if show:
+            segs.append((f"{value:>2}", color))
+            segs.append((unit, "white"))
+        else:
+            segs.append(("   ", None))
+
+    _slot(d, "d", "orange", bool(d))
+    segs.append((" ", None))
+    _slot(h, "h", "cyan", bool(d or h))
+    segs.append((" ", None))
+    _slot(m, "m", "magenta", True)
     return segs
 
 
@@ -196,7 +209,8 @@ def build_segments(
         resets = session.get("resets_at", "")
         line: list[tuple[str, str | None]] = [
             ("Session  : ", None),
-            (f"{pct:.1f}%", _pct_color_name(pct)),
+            (f"{pct:>5.1f}", _pct_color_name(pct)),
+            ("%", "white"),
             (" used - reset at ", None),
             (resets, None),
             (" (in ", None),
@@ -210,7 +224,8 @@ def build_segments(
         resets = weekly.get("resets_at", "")
         line = [
             ("Weekly   : ", None),
-            (f"{pct:.1f}%", _pct_color_name(pct)),
+            (f"{pct:>5.1f}", _pct_color_name(pct)),
+            ("%", "white"),
             (" used - reset at ", None),
             (resets, None),
             (" (in ", None),
@@ -235,8 +250,8 @@ def build_segments(
         for item in models:
             lines.append(
                 [
-                    ("          ", None),
-                    (f"{item['requests']}", "cyan"),
+                    ("           ", None),
+                    (f"{item['requests']:>5}", "cyan"),
                     (f" {item['name']}", None),
                 ]
             )
@@ -322,6 +337,7 @@ class OllamaGui:
         self._root.title(title or f"{APP_NAME} ({_pkg_version})")
         self._root.resizable(True, True)
         self._root.minsize(_MIN_WIDTH, _MIN_HEIGHT)
+        self._set_icon()
 
         saved = _load_geometry()
         self._root.geometry(saved or _DEFAULT_GEOMETRY)
@@ -330,7 +346,7 @@ class OllamaGui:
             self._root,
             wrap="word",
             height=12,
-            width=70,
+            width=80,
             padx=10,
             pady=10,
             relief=tk.FLAT,
@@ -356,7 +372,7 @@ class OllamaGui:
         # Dark mode checkbox between the two buttons.
         self._dark_var = tk.BooleanVar(value=self._dark)
         self._dark_ck = tk.Checkbutton(
-            buttons, text="darkmode", variable=self._dark_var,
+            buttons, text="darkmode", underline=0, variable=self._dark_var,
             command=self._toggle_dark, bg=self._bg, fg=self._fg,
             activebackground=self._bg, activeforeground=self._fg,
             selectcolor=self._bg,
@@ -369,16 +385,27 @@ class OllamaGui:
         )
         self._ok_btn.pack(side="right", padx=4)
 
-        # Keyboard shortcuts: Alt+r to refresh, Alt+o or Enter to close.
+        # Keyboard shortcuts: Alt+r to refresh, Alt+o or Enter to close,
+        # Alt+d to toggle dark mode.
         self._root.bind("<Alt-r>", self._on_refresh_key)
         self._root.bind("<Alt-Key-r>", self._on_refresh_key)
         self._root.bind("<Alt-o>", self._on_quit_key)
         self._root.bind("<Alt-Key-o>", self._on_quit_key)
         self._root.bind("<Return>", self._on_quit_key)
+        self._root.bind("<Alt-d>", self._on_dark_key)
+        self._root.bind("<Alt-Key-d>", self._on_dark_key)
 
         self._fetch_async()
 
     # ---------------------------------------------------------------- data
+
+    def _set_icon(self) -> None:
+        """Set the window icon from icon.ico if it exists (best-effort)."""
+        try:
+            if _ICON_PATH.is_file():
+                self._root.iconbitmap(str(_ICON_PATH))
+        except Exception:
+            logger.debug("Could not set window icon: %s", _ICON_PATH)
 
     def _refresh(self) -> None:
         self._fetch_async()
@@ -389,6 +416,11 @@ class OllamaGui:
 
     def _on_quit_key(self, _event: tk.Event) -> str:
         self._quit()
+        return "break"
+
+    def _on_dark_key(self, _event: tk.Event) -> str:
+        self._dark_var.set(not self._dark_var.get())
+        self._toggle_dark()
         return "break"
 
     # ---------------------------------------------------------------- theme

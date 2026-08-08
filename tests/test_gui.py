@@ -125,17 +125,30 @@ class TestBuildSegments:
     def test_low_percentage_is_green(self) -> None:
         segs = build_segments(make_data(session_pct=2.6))
         session_line = next(l for l in segs if "Session" in _seg_text(l))
-        assert _seg_color(session_line, "2.6%") == "green"
+        assert _seg_color(session_line, "2.6") == "green"
 
     def test_mid_percentage_is_yellow(self) -> None:
         segs = build_segments(make_data(session_pct=60.0))
         session_line = next(l for l in segs if "Session" in _seg_text(l))
-        assert _seg_color(session_line, "60.0%") == "yellow"
+        assert _seg_color(session_line, "60.0") == "yellow"
 
     def test_high_percentage_is_red(self) -> None:
         segs = build_segments(make_data(session_pct=90.0))
         session_line = next(l for l in segs if "Session" in _seg_text(l))
-        assert _seg_color(session_line, "90.0%") == "red"
+        assert _seg_color(session_line, "90.0") == "red"
+
+    def test_percentage_label_is_white(self) -> None:
+        segs = build_segments(make_data(session_pct=2.6))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        assert _seg_color(session_line, "%") == "white"
+
+    def test_percentage_right_aligned(self) -> None:
+        segs = build_segments(make_data(session_pct=2.6, weekly_pct=100.0))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        weekly_line = next(l for l in segs if "Weekly" in _seg_text(l))
+        # Both percentages occupy a 5-char right-aligned field.
+        assert "  2.6" in _seg_text(session_line)
+        assert "100.0" in _seg_text(weekly_line)
 
     def test_web_search_count_is_cyan(self) -> None:
         segs = build_segments(make_data(web_search_requests=2))
@@ -154,12 +167,51 @@ class TestBuildSegments:
         model_line = next(l for l in segs if "glm-5.2" in _seg_text(l))
         assert _seg_color(model_line, "2") == "cyan"
 
+    def test_model_request_number_right_aligned(self) -> None:
+        models = [{"name": "glm-5.2", "requests": 2}]
+        segs = build_segments(make_data(models=models))
+        model_line = next(l for l in segs if "glm-5.2" in _seg_text(l))
+        # Number is right-aligned in a 5-char field, matching the % column.
+        assert "    2" in _seg_text(model_line)
+
+    def test_model_number_aligns_with_percentage_column(self) -> None:
+        models = [{"name": "glm-5.2", "requests": 2}]
+        segs = build_segments(make_data(session_pct=2.6, models=models))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        model_line = next(l for l in segs if "glm-5.2" in _seg_text(l))
+        # The model number's right edge aligns with the percentage's right edge
+        # (the '%' column).
+        session_text = _seg_text(session_line)
+        model_text = _seg_text(model_line)
+        pct_right = session_text.index("%")
+        model_right = model_text.index("2") + 1
+        assert pct_right == model_right
+
     def test_countdown_hours_cyan_minutes_magenta(self) -> None:
         segs = build_segments(make_data(session_pct=2.6))
         session_line = next(l for l in segs if "Session" in _seg_text(l))
         # resets_at is in the future relative to the test's fixed data; the
         # countdown may be hours/minutes. Just assert the "(in " wrapper exists.
         assert "(in " in _seg_text(session_line)
+
+    def test_countdown_unit_labels_white(self) -> None:
+        segs = build_segments(make_data(session_pct=2.6))
+        weekly_line = next(l for l in segs if "Weekly" in _seg_text(l))
+        # The 'd', 'h' and 'm' unit labels are white.
+        labels = {text: color for text, color in weekly_line if text in ("d", "h", "m")}
+        assert labels.get("d") == "white"
+        assert labels.get("h") == "white"
+        assert labels.get("m") == "white"
+
+    def test_countdown_days_orange(self) -> None:
+        segs = build_segments(make_data(session_pct=2.6))
+        weekly_line = next(l for l in segs if "Weekly" in _seg_text(l))
+        # The days number is orange.
+        days_num = next(
+            (text for text, color in weekly_line if color == "orange"), None
+        )
+        assert days_num is not None
+        assert days_num.strip().isdigit()
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +260,7 @@ def _make_gui(data: dict | None = None, error: str | None = None,
          patch("ollama_usage.gui.tk.Text", return_value=fake_text), \
          patch("ollama_usage.gui.tk.Button", return_value=fake_button) as btn_mock, \
          patch("ollama_usage.gui.tk.Frame", return_value=fake_frame), \
-         patch("ollama_usage.gui.tk.Checkbutton", return_value=fake_check), \
+         patch("ollama_usage.gui.tk.Checkbutton", return_value=fake_check) as check_mock, \
          patch("ollama_usage.gui.tk.BooleanVar", return_value=fake_bool), \
          patch("ollama_usage.gui._load_geometry", return_value=None), \
          patch("ollama_usage.gui._load_darkmode", side_effect=_load_dark):
@@ -216,32 +268,42 @@ def _make_gui(data: dict | None = None, error: str | None = None,
         gui = OllamaGui(cookie="fake-cookie")
         gui._data = data
         gui._error = error
-        return gui, fake_root, fake_text, btn_mock
+        return gui, fake_root, fake_text, btn_mock, check_mock
 
 
 class TestOllamaGui:
 
     def test_title_contains_app_name_and_version(self) -> None:
         from ollama_usage import __version__
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         expected = f"{APP_NAME} ({__version__})"
         fake_root.title.assert_called_once_with(expected)
 
+    def test_icon_set_from_ico_file(self) -> None:
+        import ollama_usage.gui as gui_mod
+        gui, fake_root, _, _, _ = _make_gui()
+        # _set_icon is called during __init__; verify iconbitmap was invoked
+        # with the icon path when the file exists.
+        if gui_mod._ICON_PATH.is_file():
+            fake_root.iconbitmap.assert_called_once_with(str(gui_mod._ICON_PATH))
+        else:
+            fake_root.iconbitmap.assert_not_called()
+
     def test_ok_button_quits(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch("ollama_usage.gui.sys.exit") as mock_exit:
             gui._quit()
         fake_root.destroy.assert_called_once()
         mock_exit.assert_called_once_with(0)
 
     def test_refresh_button_triggers_fetch(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch.object(gui, "_fetch_async") as mock_fetch:
             gui._refresh()
         mock_fetch.assert_called_once()
 
     def test_redraw_inserts_built_lines(self) -> None:
-        gui, fake_root, fake_text, _ = _make_gui(
+        gui, fake_root, fake_text, _, _ = _make_gui(
             data=make_data(session_pct=2.6, weekly_pct=1.9)
         )
         fake_text.index.return_value = "1.0"
@@ -252,14 +314,14 @@ class TestOllamaGui:
         assert "1.9%" in inserted
 
     def test_redraw_shows_error(self) -> None:
-        gui, fake_root, fake_text, _ = _make_gui(error="Network error")
+        gui, fake_root, fake_text, _, _ = _make_gui(error="Network error")
         fake_text.index.return_value = "1.0"
         gui._redraw()
         inserted = "".join(c.args[1] for c in fake_text.insert.call_args_list)
         assert "Network error" in inserted
 
     def test_redraw_applies_color_tags(self) -> None:
-        gui, fake_root, fake_text, _ = _make_gui(
+        gui, fake_root, fake_text, _, _ = _make_gui(
             data=make_data(session_pct=2.6, weekly_pct=1.9)
         )
         fake_text.index.return_value = "1.0"
@@ -268,7 +330,7 @@ class TestOllamaGui:
         assert fake_text.tag_add.called
 
     def test_fetch_success_updates_data_and_schedules_redraw(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         data = make_data()
         with patch("ollama_usage.gui.get_usage", return_value=data):
             gui._fetch()
@@ -280,14 +342,14 @@ class TestOllamaGui:
 
     def test_fetch_network_error_sets_error(self) -> None:
         from ollama_usage.exceptions import NetworkError
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch("ollama_usage.gui.get_usage", side_effect=NetworkError("down")):
             gui._fetch()
         assert gui._error == "Network error"
 
     def test_fetch_auth_error_refreshes_cookie(self) -> None:
         from ollama_usage.exceptions import AuthError
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         data = make_data()
         with patch("ollama_usage.gui.get_usage", side_effect=[AuthError("expired"), data]):
             gui._fetch()
@@ -295,7 +357,7 @@ class TestOllamaGui:
         assert gui._error is None
 
     def test_buttons_have_equal_width(self) -> None:
-        gui, fake_root, _, fake_button = _make_gui()
+        gui, fake_root, _, fake_button, _ = _make_gui()
         # Both buttons are created with the same width option.
         widths = []
         for call in fake_button.call_args_list:
@@ -306,7 +368,7 @@ class TestOllamaGui:
         assert widths[0] == widths[1] == 10
 
     def test_refresh_button_has_underlined_r(self) -> None:
-        gui, fake_root, _, fake_button = _make_gui()
+        gui, fake_root, _, fake_button, _ = _make_gui()
         refresh_kwargs = None
         for call in fake_button.call_args_list:
             if call.kwargs.get("text") == "Refresh":
@@ -315,7 +377,7 @@ class TestOllamaGui:
         assert refresh_kwargs.get("underline") == 0
 
     def test_ok_button_has_underlined_o(self) -> None:
-        gui, fake_root, _, fake_button = _make_gui()
+        gui, fake_root, _, fake_button, _ = _make_gui()
         ok_kwargs = None
         for call in fake_button.call_args_list:
             if call.kwargs.get("text") == "OK":
@@ -324,25 +386,25 @@ class TestOllamaGui:
         assert ok_kwargs.get("underline") == 0
 
     def test_alt_r_triggers_refresh(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch.object(gui, "_refresh") as mock_refresh:
             gui._on_refresh_key(None)
         mock_refresh.assert_called_once()
 
     def test_alt_o_triggers_quit(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch.object(gui, "_quit") as mock_quit:
             gui._on_quit_key(None)
         mock_quit.assert_called_once()
 
     def test_enter_triggers_quit(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch.object(gui, "_quit") as mock_quit:
             gui._on_quit_key(None)
         mock_quit.assert_called_once()
 
     def test_quit_saves_geometry(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         fake_root.geometry.return_value = "560x300+10+10"
         with patch("ollama_usage.gui._save_geometry") as mock_save, \
              patch("ollama_usage.gui.sys.exit"):
@@ -350,7 +412,7 @@ class TestOllamaGui:
         mock_save.assert_called_once_with("560x300+10+10")
 
     def test_geometry_restored_from_state(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         # _load_geometry is patched to return None in _make_gui, so geometry
         # falls back to the default. Verify the default is applied.
         fake_root.geometry.assert_called_once_with(_DEFAULT_GEOMETRY)
@@ -408,18 +470,18 @@ class TestDarkMode:
         assert _theme_colors(False)["cyan"] != COLORS["cyan"]
 
     def test_gui_default_light_background(self) -> None:
-        gui, fake_root, fake_text, _ = _make_gui()
+        gui, fake_root, fake_text, _, _ = _make_gui()
         # Light mode: white background, black foreground.
         assert gui._bg == "#ffffff"
         assert gui._fg == "#000000"
 
     def test_gui_dark_background(self) -> None:
-        gui, fake_root, fake_text, _ = _make_gui(dark=True)
+        gui, fake_root, fake_text, _, _ = _make_gui(dark=True)
         assert gui._bg == "#000000"
         assert gui._fg == "#ffffff"
 
     def test_toggle_dark_updates_colors_and_saves(self) -> None:
-        gui, fake_root, fake_text, _ = _make_gui()
+        gui, fake_root, fake_text, _, _ = _make_gui()
         gui._dark_var.get.return_value = True
         with patch("ollama_usage.gui._save_darkmode") as mock_save, \
              patch.object(gui, "_redraw") as mock_redraw:
@@ -432,9 +494,27 @@ class TestDarkMode:
         fake_text.tag_configure.assert_called()
 
     def test_quit_saves_darkmode(self) -> None:
-        gui, fake_root, _, _ = _make_gui()
+        gui, fake_root, _, _, _ = _make_gui()
         with patch("ollama_usage.gui._save_darkmode") as mock_save, \
              patch("ollama_usage.gui._save_geometry"), \
              patch("ollama_usage.gui.sys.exit"):
             gui._quit()
         mock_save.assert_called_once_with(gui._dark)
+
+    def test_darkmode_checkbox_has_underlined_d(self) -> None:
+        gui, fake_root, _, _, check_mock = _make_gui()
+        # The Checkbutton is created with underline=0 (underlines the 'd').
+        check_kwargs = None
+        for call in check_mock.call_args_list:
+            if call.kwargs.get("text") == "darkmode":
+                check_kwargs = call.kwargs
+        assert check_kwargs is not None
+        assert check_kwargs.get("underline") == 0
+
+    def test_alt_d_toggles_darkmode(self) -> None:
+        gui, fake_root, _, _, _ = _make_gui()
+        gui._dark_var.get.return_value = False
+        with patch.object(gui, "_toggle_dark") as mock_toggle:
+            gui._on_dark_key(None)
+        gui._dark_var.set.assert_called_once_with(True)
+        mock_toggle.assert_called_once()
