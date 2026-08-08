@@ -125,11 +125,14 @@ COLORS: dict[str, str] = {
 }
 
 # On a light (white) background the cyan and white colors are hard to read,
-# so they are substituted: cyan -> blue, white -> near-black.
+# so they are substituted: cyan -> blue, white -> near-black, and green and
+# grey are darkened for better contrast on white.
 _LIGHT_COLORS: dict[str, str] = {
     **COLORS,
     "cyan":  "#0000ff",
     "white": "#1a1a1a",
+    "green": "#008000",
+    "grey":  "#404040",
 }
 
 #: Background / foreground colors per mode.
@@ -247,7 +250,7 @@ def build_segments(
     models = data.get("models")
     if models:
         lines.append([("Model calls this week:", "grey")])
-        for item in models:
+        for item in sorted(models, key=lambda m: m.get("requests", 0), reverse=True):
             lines.append(
                 [
                     ("           ", None),
@@ -392,6 +395,7 @@ class OllamaGui:
         self._root.bind("<Alt-o>", self._on_quit_key)
         self._root.bind("<Alt-Key-o>", self._on_quit_key)
         self._root.bind("<Return>", self._on_quit_key)
+        self._root.bind("<Escape>", self._on_quit_key)
         self._root.bind("<Alt-d>", self._on_dark_key)
         self._root.bind("<Alt-Key-d>", self._on_dark_key)
 

@@ -29,6 +29,7 @@ python -m PyInstaller \
     --onefile \
     --name "ollama-usage" \
     --console \
+    --icon="icon.ico" \
     --hidden-import="${PACKAGE}" \
     --hidden-import="${PACKAGE}.cli" \
     --hidden-import="${PACKAGE}.scraper" \
