@@ -6,6 +6,7 @@ import configparser
 import contextlib
 import json
 import logging
+import os
 import pathlib
 import platform
 import shutil
@@ -32,13 +33,19 @@ _COOKIE_HOST = "ollama.com"
 
 @contextlib.contextmanager
 def _copy_db(path: pathlib.Path) -> Generator[str, None, None]:
-    """Copy a locked SQLite DB to a temp file, yield the path, then delete it."""
+    """Copy a locked SQLite DB to a temp file, yield the path, then delete it.
+
+    On Windows the browser may hold the source file open with an exclusive
+    lock. ``shutil.copy2`` then fails with ``PermissionError`` (WinError 32),
+    so we open the source with all share flags (read/write/delete) before
+    copying.
+    """
     if not path.exists():
         raise BrowserNotFoundError(f"Cookie database not found: {path}")
     tmp = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
     tmp.close()
     try:
-        shutil.copy2(str(path), tmp.name)
+        _copy_file_shared(str(path), tmp.name)
     except OSError as e:
         pathlib.Path(tmp.name).unlink(missing_ok=True)
         raise BrowserNotFoundError(f"Could not copy cookie database (it may be locked by a running browser): {e}") from e
@@ -47,6 +54,48 @@ def _copy_db(path: pathlib.Path) -> Generator[str, None, None]:
     finally:
         pathlib.Path(tmp.name).unlink(missing_ok=True)
         logger.debug("Temp DB deleted: %s", tmp.name)
+
+
+def _copy_file_shared(src: str, dst: str) -> None:
+    """Copy ``src`` to ``dst``, opening ``src`` with full sharing on Windows.
+
+    Falls back to ``shutil.copy2`` on non-Windows platforms.
+    """
+    if _SYSTEM != "Windows":
+        shutil.copy2(src, dst)
+        return
+
+    # Open the source with FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE
+    # so a running browser's exclusive lock does not block us (WinError 32).
+    GENERIC_READ = 0x80000000
+    FILE_SHARE_READ = 0x00000001
+    FILE_SHARE_WRITE = 0x00000002
+    FILE_SHARE_DELETE = 0x00000004
+    OPEN_EXISTING = 3
+    FILE_ATTRIBUTE_NORMAL = 0x80
+
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    handle = ctypes.windll.kernel32.CreateFileW(
+        wintypes.LPCWSTR(src),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        None,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        None,
+    )
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError()
+    src_fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+    try:
+        with os.fdopen(src_fd, "rb") as fsrc, open(dst, "wb") as fdst:
+            shutil.copyfileobj(fsrc, fdst)
+    except Exception:
+        os.close(src_fd)
+        raise
 
 
 def _query_cookie(db_path: str, query: str, params: tuple) -> bytes | None:

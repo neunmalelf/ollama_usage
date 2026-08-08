@@ -8,7 +8,10 @@ from ollama_usage.exceptions import (
     UnsupportedOSError,
 )
 
+__version__ = "0.1.20280807093000"
+
 __all__ = [
+    "__version__",
     "get_usage",
     "OllamaUsageError",
     "AuthError",
