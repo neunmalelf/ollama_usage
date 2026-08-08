@@ -51,6 +51,11 @@ ollama-usage --watch
 ollama-usage --watch --json
 ollama-usage --watch --interval 60
 
+# Autorefresh mode (default 120s, shows next-refresh timestamp footer)
+ollama-usage --autorefresh
+ollama-usage --autorefresh 60
+ollama-usage --autorefresh 1200
+
 # Alert mode — exit code 1 if usage exceeds 80%
 ollama-usage --alert 80
 
@@ -75,6 +80,14 @@ ollama-usage --debug --browser firefox
 
 # GUI window (OK + Refresh buttons)
 ollama-usage --gui
+
+# Desktop widget (always-on-top, auto-refreshing)
+ollama-usage --widget
+ollama-usage --widget --theme light
+ollama-usage --widget --size compact
+ollama-usage --widget --opacity 0.8
+ollama-usage --widget --position bottom-right
+ollama-usage --widget --theme minimal --size compact --position top-right --interval 60
 
 # Version
 ollama-usage --version
@@ -179,6 +192,9 @@ ollama-usage --notify --watch --notify-threshold 75 --interval 60
 - The window title shows the app name and version: `ollama-usage (<version>)`.
 - An **OK** button closes the app.
 - A **Refresh** button re-fetches the data and redraws the window.
+- A **darkmode** checkbox toggles dark mode (Alt+d).
+- An **autorefresh (s)** field sets the refresh interval in seconds (default 120).
+  The value is saved and restored on the next launch.
 
 ```bash
 # Open the GUI window
@@ -198,6 +214,56 @@ from ollama_usage.cookie import get_cookie_auto
 
 launch_gui(cookie=get_cookie_auto)
 ```
+
+---
+
+## Desktop widget
+
+`--widget` opens a small, **always-on-top** desktop widget that shows your quota as live gauges and auto-refreshes. It uses **tkinter** (Python stdlib), so no extra dependency is required.
+
+- **Frameless** and draggable — click and drag anywhere to move it.
+- **Right-click** opens a context menu: refresh now, toggle size, or close.
+- **Auto-refreshes** every `--interval` seconds (default 30, min 10).
+- Remembers its last position between runs (unless `--position` is given).
+
+### Options
+
+| Option | Values | Default | Description |
+|--------|--------|---------|-------------|
+| `--theme` | `dark`, `light`, `minimal` | `dark` | Color scheme |
+| `--size` | `full`, `compact` | `full` | `full` shows bars + countdown; `compact` shows text only |
+| `--opacity` | `0.1` – `1.0` | `0.92` | Window transparency |
+| `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |
+| `--interval` | seconds (min 10) | `30` | Auto-refresh interval |
+
+```bash
+# Default widget (dark, full, top-right)
+ollama-usage --widget
+
+# Light theme, compact, bottom-right, refresh every 60s
+ollama-usage --widget --theme light --size compact --position bottom-right --interval 60
+
+# Semi-transparent minimal widget
+ollama-usage --widget --theme minimal --opacity 0.8
+```
+
+### Python usage
+```python
+from ollama_usage.widget import launch_widget
+from ollama_usage.cookie import get_cookie_auto
+
+launch_widget(
+    cookie=get_cookie_auto,
+    interval=60,
+    theme="light",
+    size="compact",
+    opacity=0.9,
+    position="bottom-right",
+)
+```
+
+> On minimal Linux installs, tkinter may need to be installed separately:
+> `sudo apt install python3-tk`
 
 ---
 
@@ -286,8 +352,32 @@ Allow access to continue.
 - [x] Environment variable support (`OLLAMA_BROWSER_COOKIE`)
 - [x] Web search usage statistics
 - [x] GUI window with `--gui`
+- [x] Desktop widget with `--widget`
 - [ ] Safari support
 - [ ] Migrate to official `/api/me` when available ([#12532](https://github.com/ollama/ollama/issues/12532))
+
+---
+
+## Building a standalone executable
+
+You can compile `ollama-usage` into a single Windows `.exe` with **Nuitka** (native-compiled, faster-starting, harder-to-decompile than PyInstaller).
+
+```bash
+# From the project root
+./_compile.sh
+```
+
+The script:
+- Compiles to a single-file `dist/ollama-usage.exe` (onefile mode).
+- Embeds `icon.ico` as the executable icon **and** bundles it so the GUI window and widget show it at runtime.
+- Includes the tkinter GUI toolkit (`--enable-plugin=tk-inter`).
+- Copies the finished `.exe` to `~/scoop/apps/python/current/Scripts/`.
+
+Requirements:
+- Python with Nuitka installed: `pip install nuitka`
+- On Python 3.13+, Nuitka needs the **Zig** compiler (installed via scoop) rather than MinGW64. The script handles this automatically with `--zig`.
+
+> The build takes a few minutes on first run (it compiles all modules to C).
 
 ---
 

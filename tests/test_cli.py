@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch, MagicMock
 
-from ollama_usage.cli import _sanitize_cookie, _check_alert, display, _format_time_left
+from ollama_usage.cli import (
+    _sanitize_cookie,
+    _check_alert,
+    display,
+    _format_time_left,
+    _autorefresh_footer,
+    _next_refresh_str,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -275,3 +282,33 @@ class TestCLICountdownSilent:
         from ollama_usage.cli import _watch_countdown
         _watch_countdown(30)
         mock_sleep.assert_called_once_with(30)
+
+
+# ---------------------------------------------------------------------------
+# Autorefresh footer
+# ---------------------------------------------------------------------------
+
+class TestAutorefreshFooter:
+
+    def test_next_refresh_str_format(self) -> None:
+        from datetime import datetime, timedelta
+        fixed = datetime(2026, 8, 8, 13, 46, 5)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed
+            mock_dt.timedelta = timedelta
+            result = _next_refresh_str(120)
+        assert result == "2026-08-08 13-48-05"
+
+    def test_footer_contains_timestamps_and_interval(self, capsys) -> None:
+        from datetime import datetime, timedelta
+        fixed = datetime(2026, 8, 8, 13, 46, 5)
+        with patch("ollama_usage.cli.datetime") as mock_dt, \
+             patch("ollama_usage.cli.sys.stdout.isatty", return_value=False), \
+             patch.dict("os.environ", {"NO_COLOR": "1"}):
+            mock_dt.now.return_value = fixed
+            mock_dt.timedelta = timedelta
+            _autorefresh_footer(120)
+        out = capsys.readouterr().out
+        assert "2026-08-08 13-46-05" in out
+        assert "next refresh in 120 seconds" in out
+        assert "2026-08-08 13-48-05" in out
