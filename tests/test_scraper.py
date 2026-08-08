@@ -19,6 +19,7 @@ def make_html(
     weekly_pct: float = 27.9,
     weekly_time: str = "2026-04-06T00:00:00Z",
     web_search_requests: int | None = None,
+    models: list[tuple[str, int]] | None = None,
 ) -> str:
     """Build a minimal but realistic settings page HTML fragment."""
     segment = ""
@@ -27,6 +28,14 @@ def make_html(
             '<button data-usage-segment data-model="web search" '
             f'data-requests="{web_search_requests}"></button>'
         )
+    models_html = ""
+    if models is not None:
+        rows = "".join(
+            '<span title="%s">%s</span><span class="flex-none tabular-nums"> %d requests </span>'
+            % (name, name, count)
+            for name, count in models
+        )
+        models_html = f'<div id="weekly-usage-models"><div>Models used this week</div>{rows}</div>'
     return f"""
     <span class="capitalize">{plan}</span>
     <span class="text-sm">Session usage</span>
@@ -36,6 +45,7 @@ def make_html(
     <span class="text-sm">{weekly_pct}% used</span>
     <div class="local-time" data-time="{weekly_time}">Resets soon</div>
     {segment}
+    {models_html}
     """
 
 
@@ -233,6 +243,39 @@ class TestWebSearchUsage:
 
 
 # ---------------------------------------------------------------------------
+# Per-model request counts
+# ---------------------------------------------------------------------------
+
+class TestModels:
+
+    def test_models_parsed(self) -> None:
+        html = make_html(models=[("glm-5.2", 2), ("web search", 2), ("deepseek-v4-flash", 60)])
+        data = parse_html(html)
+        assert data["models"] == [
+            {"name": "glm-5.2", "requests": 2},
+            {"name": "web search", "requests": 2},
+            {"name": "deepseek-v4-flash", "requests": 60},
+        ]
+
+    def test_models_requests_are_int(self) -> None:
+        data = parse_html(make_html(models=[("glm-5.2", 2)]))
+        assert isinstance(data["models"][0]["requests"], int)
+
+    def test_models_none_when_absent(self) -> None:
+        assert parse_html(make_html())["models"] is None
+
+    def test_models_none_on_free(self, free_html: str) -> None:
+        assert parse_html(free_html)["models"] is None
+
+    def test_models_do_not_affect_quotas(self) -> None:
+        html = make_html(models=[("glm-5.2", 2)], session_pct=1.5, weekly_pct=1.7)
+        data = parse_html(html)
+        assert data["models"][0]["requests"] == 2
+        assert data["session"]["used_pct"] == 1.5
+        assert data["weekly"]["used_pct"] == 1.7
+
+
+# ---------------------------------------------------------------------------
 # Order-independent parsing (reversed sections)
 # ---------------------------------------------------------------------------
 
@@ -291,6 +334,7 @@ class TestReversedOrderParsing:
             "session": {"used_pct": 45.0, "resets_at": "2026-04-05T10:00:00Z"},
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
+            "models": None,
         }
 
     @pytest.mark.parametrize("session_pct,weekly_pct", [
@@ -315,12 +359,14 @@ class TestOutputStructure:
 
     def test_top_level_keys(self, free_html: str) -> None:
         assert set(parse_html(free_html).keys()) == {
-            "plan", "session", "weekly", "web_search_requests"
+            "plan", "session", "weekly", "web_search_requests", "models"
         }
 
     def test_full_structure(self, pro_html: str) -> None:
         data = parse_html(pro_html)
-        assert set(data.keys()) == {"plan", "session", "weekly", "web_search_requests"}
+        assert set(data.keys()) == {
+            "plan", "session", "weekly", "web_search_requests", "models"
+        }
         assert set(data["session"].keys()) == {"used_pct", "resets_at"}
         assert set(data["weekly"].keys()) == {"used_pct", "resets_at"}
 
@@ -334,6 +380,7 @@ class TestOutputStructure:
             "session": {"used_pct": 45.0, "resets_at": "2026-04-05T10:00:00Z"},
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
+            "models": None,
         }
 
     def test_max_plan_full_usage(self, max_html: str) -> None:

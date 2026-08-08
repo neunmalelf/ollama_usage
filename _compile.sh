@@ -35,7 +35,6 @@ python -m PyInstaller \
     --hidden-import="${PACKAGE}.cookie" \
     --hidden-import="${PACKAGE}.exceptions" \
     --hidden-import="${PACKAGE}.notify" \
-    --collect-all colorama \
     --collect-all cryptography \
     "${ENTRY_POINT}"
 

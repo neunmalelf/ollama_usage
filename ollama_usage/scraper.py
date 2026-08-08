@@ -32,6 +32,15 @@ _WEB_SEARCH_SEGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Per-model request counts in the "Models used this week" list.
+# Each row: <span title="NAME">NAME</span> <span ...> N requests </span>
+_MODELS_LIST_MARKER = "models used this week"
+_MODEL_ITEM_RE = re.compile(
+    r'title="([^"]+)"[^>]*>\s*[^<]*</span>\s*'
+    r'<span[^>]*>\s*(\d+)\s*requests',
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class PeriodUsage:
@@ -45,6 +54,7 @@ class UsageData:
     session: PeriodUsage
     weekly: PeriodUsage
     web_search_requests: int | None = None
+    models: list[dict[str, int]] | None = None
 
     def to_dict(self) -> dict:
         def _period(p: PeriodUsage | None) -> dict | None:
@@ -57,6 +67,7 @@ class UsageData:
             "session": _period(self.session),
             "weekly": _period(self.weekly),
             "web_search_requests": self.web_search_requests,
+            "models": self.models,
         }
 
 
@@ -166,22 +177,46 @@ def _extract_web_search_requests(html: str) -> int | None:
     return sum(int(c) for c in counts)
 
 
+def _extract_models(html: str) -> list[dict[str, int]] | None:
+    """Extract the per-model request counts from the "Models used this week" list.
+
+    Returns a list of {"name": ..., "requests": ...} dicts, or None when the
+    list is not present.
+    """
+    pos = html.lower().find(_MODELS_LIST_MARKER)
+    if pos == -1:
+        return None
+    # Only look within the models list section (up to the next script tag).
+    end = html.find("<script", pos)
+    section = html[pos:end] if end != -1 else html[pos:]
+    matches = _MODEL_ITEM_RE.findall(section)
+    if not matches:
+        return None
+    return [
+        {"name": name, "requests": int(count)}
+        for name, count in matches
+    ]
+
+
 def parse_html(html: str) -> dict:
     """Parse the settings page HTML and return a usage dict."""
     _check_auth(html)
     plan = _extract_plan(html)
     session_pct, weekly_pct, session_time, weekly_time = _extract_usage(html)
     web_search_requests = _extract_web_search_requests(html)
+    models = _extract_models(html)
     logger.debug("Parsing HTML...")
     logger.debug(
-        "Parsed: plan=%s session=%.1f%% weekly=%.1f%% web_search_requests=%s",
+        "Parsed: plan=%s session=%.1f%% weekly=%.1f%% web_search_requests=%s models=%s",
         plan, session_pct, weekly_pct, web_search_requests,
+        "None" if models is None else len(models),
     )
     return UsageData(
         plan=plan,
         session=PeriodUsage(used_pct=session_pct, resets_at=session_time),
         weekly=PeriodUsage(used_pct=weekly_pct, resets_at=weekly_time),
         web_search_requests=web_search_requests,
+        models=models,
     ).to_dict()
 
 

@@ -5,7 +5,46 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch, MagicMock
 
-from ollama_usage.cli import _sanitize_cookie, _check_alert, display
+from ollama_usage.cli import _sanitize_cookie, _check_alert, display, _format_time_left
+
+
+# ---------------------------------------------------------------------------
+# _format_time_left — reset countdown
+# ---------------------------------------------------------------------------
+
+class TestFormatTimeLeft:
+    """Deterministic tests using a fixed reference 'now'."""
+
+    def test_plain_output_without_color(self) -> None:
+        from datetime import datetime, timezone, timedelta
+        fixed = datetime(2026, 4, 2, 14, 18, 0, tzinfo=timezone.utc)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.fromisoformat.side_effect = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+            mock_dt.now.return_value = fixed
+            mock_dt.timezone = timezone
+            result = _format_time_left("2026-04-04T17:00:00Z", use_color=False)
+        # Reference now -> target is exactly 2 days, 2 hours, 42 minutes later.
+        assert result == " (in  2d  2h 42m)"
+
+    def test_color_wraps_numbers_and_labels(self) -> None:
+        from datetime import datetime, timezone
+        from ollama_usage.cli import _ANSI
+        fixed = datetime(2026, 4, 2, 14, 18, 0, tzinfo=timezone.utc)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.fromisoformat.side_effect = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+            mock_dt.now.return_value = fixed
+            mock_dt.timezone = timezone
+            result = _format_time_left("2026-04-04T17:00:00Z", use_color=True)
+        # Days number in yellow, hours in cyan, minutes in magenta; labels white.
+        assert _ANSI["yellow"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "d" + _ANSI["reset"] in result
+        assert _ANSI["cyan"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "h" + _ANSI["reset"] in result
+        assert _ANSI["magenta"] + "42" + _ANSI["reset"] + _ANSI["white"] + "m" + _ANSI["reset"] in result
+
+    def test_resets_now_when_past(self) -> None:
+        assert _format_time_left("2000-01-01T00:00:00Z") == " (resets now)"
+
+    def test_invalid_returns_empty(self) -> None:
+        assert _format_time_left("not-a-date") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -54,12 +93,13 @@ class TestSanitizeCookie:
 # ---------------------------------------------------------------------------
 
 def make_data(session_pct: float = 0.0, weekly_pct: float = 0.0,
-              web_search_requests: int | None = None) -> dict:
+              web_search_requests: int | None = None, models: list | None = None) -> dict:
     return {
         "plan": "free",
         "session": {"used_pct": session_pct, "resets_at": "2026-04-04T17:00:00Z"},
         "weekly":  {"used_pct": weekly_pct,  "resets_at": "2026-04-06T00:00:00Z"},
         "web_search_requests": web_search_requests,
+        "models": models,
     }
 
 
@@ -134,6 +174,22 @@ class TestDisplay:
         assert "WebSearch" in out
         assert "2" in out
 
+    def test_text_output_shows_models_when_present(self, capsys) -> None:
+        models = [
+            {"name": "glm-5.2", "requests": 2},
+            {"name": "deepseek-v4-flash", "requests": 60},
+        ]
+        display(make_data(models=models), as_json=False, quiet=False)
+        out = capsys.readouterr().out
+        assert "Model calls this week" in out
+        assert "glm-5.2" in out
+        assert "deepseek-v4-flash" in out
+
+    def test_text_output_omits_models_when_absent(self, capsys) -> None:
+        display(make_data(), as_json=False, quiet=False)
+        out = capsys.readouterr().out
+        assert "Models used this week" not in out
+
 
 # ---------------------------------------------------------------------------
 # Interval clamping
@@ -205,9 +261,9 @@ class TestCLIColoration:
     @patch.dict("os.environ", {}, clear=True)
     @patch("ollama_usage.cli._HAS_COLOR", new=True)
     def test_color_enabled_on_tty_without_no_color(self, mock_isatty) -> None:
-        from ollama_usage.cli import _color_pct, Fore, Style
+        from ollama_usage.cli import _color_pct, _ANSI
         # When color is enabled, it should output colored text
-        expected = Fore.YELLOW + " 75.0%" + Style.RESET_ALL
+        expected = _ANSI["yellow"] + " 75.0%" + _ANSI["reset"]
         assert _color_pct(75.0) == expected
 
 

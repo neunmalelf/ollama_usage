@@ -4,8 +4,6 @@ from PyInstaller.utils.hooks import collect_all
 datas = []
 binaries = []
 hiddenimports = ['ollama_usage', 'ollama_usage.cli', 'ollama_usage.scraper', 'ollama_usage.cookie', 'ollama_usage.exceptions', 'ollama_usage.notify']
-tmp_ret = collect_all('colorama')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('cryptography')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

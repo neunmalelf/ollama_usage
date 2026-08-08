@@ -3,12 +3,14 @@ import itertools
 import json
 import logging
 import os
+import platform
 import sys
 import time
 from datetime import datetime, timezone
 from importlib.metadata import version as get_version
 from typing import Optional
 
+from ollama_usage import __version__ as _pkg_version
 from ollama_usage.cookie import (
     get_cookie_auto,
     get_cookie_brave,
@@ -28,12 +30,46 @@ from ollama_usage.scraper import get_usage
 
 logger = logging.getLogger(__name__)
 
-try:
-    from colorama import Fore, Style, just_fix_windows_console
+# ANSI color support (self-contained, no colorama dependency).
+_ANSI = {
+    "reset":   "\033[0m",
+    "red":     "\033[31m",
+    "green":   "\033[32m",
+    "yellow":  "\033[33m",
+    "cyan":    "\033[36m",
+    "magenta": "\033[35m",
+    "white":   "\033[37m",
+    "grey":    "\033[90m",
+    "orange":  "\033[38;5;208m",
+}
 
-    _HAS_COLOR = True
-except ImportError:
-    _HAS_COLOR = False
+_HAS_COLOR = True
+
+
+def _enable_windows_vt() -> None:
+    """Enable ANSI/VT processing on Windows console stdout/stderr.
+
+    On Windows legacy consoles ANSI escape codes print as garbage unless
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING is set on the console mode. This is a
+    no-op (and a silent no-op) on other platforms or if the call fails.
+    """
+    if platform.system() != "Windows":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        kernel32 = ctypes.windll.kernel32
+        for stream in (sys.stdout, sys.stderr):
+            handle = kernel32.GetStdHandle(
+                wintypes.DWORD(stream is sys.stderr and -12 or -11)
+            )
+            mode = wintypes.DWORD()
+            if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _get_version() -> str:
@@ -42,7 +78,7 @@ def _get_version() -> str:
         return get_version("ollama-usage")
     except Exception:
         # Fallback for frozen executables where package metadata is unavailable
-        return "0.1.1"
+        return _pkg_version
 
 
 def _sanitize_cookie(value: str) -> str:
@@ -66,15 +102,29 @@ def _color_pct(pct: float) -> str:
     if not use_color:
         return padded_text
     if pct < 50:
-        color = Fore.GREEN
+        color = _ANSI["green"]
     elif pct < 80:
-        color = Fore.YELLOW
+        color = _ANSI["yellow"]
     else:
-        color = Fore.RED
-    return color + padded_text + Style.RESET_ALL
+        color = _ANSI["red"]
+    return color + padded_text + _ANSI["reset"]
 
 
-def _format_time_left(iso: str) -> str:
+def _color_part(value: str, color: str, use_color: bool) -> str:
+    """Color a number but leave a trailing unit label white.
+
+    ``value`` is like " 2d", " 2h" or "42m". The numeric part is wrapped in
+    ``color`` and the unit letter in white when color is enabled.
+    """
+    if not use_color:
+        return value
+    return (
+        _ANSI[color] + value[:-1] + _ANSI["reset"]
+        + _ANSI["white"] + value[-1] + _ANSI["reset"]
+    )
+
+
+def _format_time_left(iso: str, use_color: bool = False) -> str:
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
         diff = dt - datetime.now(timezone.utc)
@@ -87,12 +137,12 @@ def _format_time_left(iso: str) -> str:
 
         if hours >= 24:
             days, hours = divmod(hours, 24)
-            days_str = f"{days:>2}d"
+            days_str = _color_part(f"{days:>2}d", "yellow", use_color)
         else:
             days_str = "   "
 
-        hours_str = f"{hours:>2}h"
-        minutes_str = f"{minutes:>2}m"
+        hours_str = _color_part(f"{hours:>2}h", "cyan", use_color)
+        minutes_str = _color_part(f"{minutes:>2}m", "magenta", use_color)
 
         return f" (in {days_str} {hours_str} {minutes_str})"
     except Exception:
@@ -105,19 +155,36 @@ def display(data: dict, as_json: bool, quiet: bool) -> None:
     if as_json:
         print(json.dumps(data, indent=2))
     else:
+        use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
         plan = data['plan']
-        if _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ:
-            plan = f"{Fore.CYAN} {plan}{Style.RESET_ALL}"
+        if use_color:
+            plan = f" {_ANSI['orange']}{plan}{_ANSI['reset']}"
+        print("")
         print(f"Plan     :  {plan}")
         print(
-            f"Session  : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'])}"
+            f"Session  : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'], use_color)}"
         )
         print(
-            f"Weekly   : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'])}"
+            f"Weekly   : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'], use_color)}"
         )
         web_search = data.get("web_search_requests")
         if web_search is not None:
-            print(f"WebSearch:   {Fore.CYAN}{web_search}{Style.RESET_ALL} request{'s' if web_search != 1 else ''}")
+            count = f"{web_search:>6}"
+            if use_color:
+                count = _ANSI["cyan"] + count + _ANSI["reset"]
+            print(f"WebSearch: {count} request{'s' if web_search != 1 else ''}")
+
+        models = data.get("models")
+        if models:
+            header = "Model calls this week:"
+            if use_color:
+                header = f"{_ANSI['grey']}{header}{_ANSI['reset']}"
+            print(header)
+            for item in models:
+                num = f"{item['requests']:>6}"
+                if use_color:
+                    num = _ANSI["cyan"] + num + _ANSI["reset"]
+                print(f"{'':>11}{num} {item['name']}")
 
 
 def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
@@ -133,7 +200,7 @@ def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
                 _HAS_COLOR and sys.stderr.isatty() and "NO_COLOR" not in os.environ
             )
             if use_color:
-                print(Fore.RED + "⚠️  " + msg + Style.RESET_ALL, file=sys.stderr)
+                print(_ANSI["red"] + "⚠️  " + msg + _ANSI["reset"], file=sys.stderr)
             else:
                 print(f"⚠️  {msg}", file=sys.stderr)
         return True
@@ -212,7 +279,7 @@ def main():
     args = parser.parse_args()
 
     if _HAS_COLOR:
-        just_fix_windows_console()
+        _enable_windows_vt()
 
     if args.interval != 30 and not args.watch:
         print("Warning: --interval has no effect without --watch.", file=sys.stderr)
