@@ -108,7 +108,7 @@ def build_lines(data: dict | None, error: str | None = None) -> list[str]:
 # ---------------------------------------------------------------------------
 
 # ANSI color names -> hex values (standard ANSI palette, matching the
-# terminal version's default rendering).
+# terminal version's default rendering). Used for the dark mode.
 COLORS: dict[str, str] = {
     "orange":  "#ff8700",
     "green":   "#00d700",
@@ -119,6 +119,25 @@ COLORS: dict[str, str] = {
     "white":   "#ffffff",
     "grey":    "#808080",
 }
+
+# On a light (white) background the cyan and white colors are hard to read,
+# so they are substituted: cyan -> blue, white -> near-black.
+_LIGHT_COLORS: dict[str, str] = {
+    **COLORS,
+    "cyan":  "#0000ff",
+    "white": "#1a1a1a",
+}
+
+#: Background / foreground colors per mode.
+_BG_FG = {
+    True:  {"bg": "#000000", "fg": "#ffffff"},  # dark mode
+    False: {"bg": "#ffffff", "fg": "#000000"},  # light mode
+}
+
+
+def _theme_colors(dark: bool) -> dict[str, str]:
+    """Return the color map for the given mode (dark or light)."""
+    return COLORS if dark else _LIGHT_COLORS
 
 #: Color used for a percentage value based on its severity (matches CLI).
 def _pct_color_name(pct: float) -> str:
@@ -229,26 +248,53 @@ def build_segments(
 # Window geometry persistence
 # ---------------------------------------------------------------------------
 
-def _load_geometry() -> str | None:
-    """Return the saved window geometry string, or None if unavailable."""
+def _load_state() -> dict:
+    """Return the saved GUI state dict, or an empty dict on failure."""
     try:
         data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
-        geom = data.get("geometry")
-        if isinstance(geom, str) and geom:
-            return geom
+        if isinstance(data, dict):
+            return data
     except Exception:
-        logger.debug("Could not load GUI geometry: %s", _STATE_FILE)
+        logger.debug("Could not load GUI state: %s", _STATE_FILE)
+    return {}
+
+
+def _save_state(state: dict) -> None:
+    """Persist the GUI state (geometry + dark mode) to disk."""
+    try:
+        _STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        logger.debug("Could not save GUI state: %s", _STATE_FILE)
+
+
+def _load_geometry() -> str | None:
+    """Return the saved window geometry string, or None if unavailable."""
+    geom = _load_state().get("geometry")
+    if isinstance(geom, str) and geom:
+        return geom
     return None
 
 
 def _save_geometry(geometry: str) -> None:
     """Persist the current window geometry (size + position) to disk."""
-    try:
-        _STATE_FILE.write_text(
-            json.dumps({"geometry": geometry}), encoding="utf-8"
-        )
-    except Exception:
-        logger.debug("Could not save GUI geometry: %s", _STATE_FILE)
+    state = _load_state()
+    state["geometry"] = geometry
+    _save_state(state)
+
+
+def _load_darkmode() -> bool:
+    """Return whether dark mode was enabled last time (default: off)."""
+    value = _load_state().get("darkmode")
+    if isinstance(value, bool):
+        return value
+    return False
+
+
+def _save_darkmode(dark: bool) -> None:
+    """Persist the dark mode preference."""
+    state = _load_state()
+    state["darkmode"] = dark
+    _save_state(state)
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +314,9 @@ class OllamaGui:
         self._data: dict | None = None
         self._error: str | None = None
         self._is_fetching = threading.Event()
+        self._dark = _load_darkmode()
+        self._colors = _theme_colors(self._dark)
+        self._bg, self._fg = _BG_FG[self._dark].values()
 
         self._root = tk.Tk()
         self._root.title(title or f"{APP_NAME} ({_pkg_version})")
@@ -285,24 +334,38 @@ class OllamaGui:
             padx=10,
             pady=10,
             relief=tk.FLAT,
+            bg=self._bg,
+            fg=self._fg,
         )
         self._text.pack(fill="both", expand=True, padx=8, pady=8)
 
         # Configure one text tag per color so segments can be colored.
-        for name, hex_color in COLORS.items():
+        for name, hex_color in self._colors.items():
             self._text.tag_configure(name, foreground=hex_color)
 
-        buttons = tk.Frame(self._root)
+        buttons = tk.Frame(self._root, bg=self._bg)
         buttons.pack(fill="x", padx=8, pady=(0, 8))
 
         # Both buttons share the same width so they line up.
         self._refresh_btn = tk.Button(
-            buttons, text="Refresh", underline=0, width=10, command=self._refresh
+            buttons, text="Refresh", underline=0, width=10, command=self._refresh,
+            bg=self._bg, fg=self._fg, activebackground=self._bg, activeforeground=self._fg,
         )
         self._refresh_btn.pack(side="left", padx=4)
 
+        # Dark mode checkbox between the two buttons.
+        self._dark_var = tk.BooleanVar(value=self._dark)
+        self._dark_ck = tk.Checkbutton(
+            buttons, text="darkmode", variable=self._dark_var,
+            command=self._toggle_dark, bg=self._bg, fg=self._fg,
+            activebackground=self._bg, activeforeground=self._fg,
+            selectcolor=self._bg,
+        )
+        self._dark_ck.pack(side="left", padx=4)
+
         self._ok_btn = tk.Button(
-            buttons, text="OK", underline=0, width=10, command=self._quit
+            buttons, text="OK", underline=0, width=10, command=self._quit,
+            bg=self._bg, fg=self._fg, activebackground=self._bg, activeforeground=self._fg,
         )
         self._ok_btn.pack(side="right", padx=4)
 
@@ -327,6 +390,30 @@ class OllamaGui:
     def _on_quit_key(self, _event: tk.Event) -> str:
         self._quit()
         return "break"
+
+    # ---------------------------------------------------------------- theme
+
+    def _toggle_dark(self) -> None:
+        """Toggle dark mode, update colors/background and redraw."""
+        self._dark = bool(self._dark_var.get())
+        _save_darkmode(self._dark)
+        self._colors = _theme_colors(self._dark)
+        self._bg, self._fg = _BG_FG[self._dark].values()
+
+        self._root.configure(bg=self._bg)
+        self._text.configure(bg=self._bg, fg=self._fg)
+        self._text.tag_config("sel", background="#3a3a3a" if self._dark else "#cce4ff")
+        for name, hex_color in self._colors.items():
+            self._text.tag_configure(name, foreground=hex_color)
+
+        for widget in (self._refresh_btn, self._ok_btn, self._dark_ck):
+            widget.configure(
+                bg=self._bg, fg=self._fg,
+                activebackground=self._bg, activeforeground=self._fg,
+            )
+        self._dark_ck.configure(selectcolor=self._bg)
+        self._refresh_btn.master.configure(bg=self._bg)
+        self._redraw()
 
     def _fetch_async(self) -> None:
         if self._is_fetching.is_set():
@@ -376,6 +463,10 @@ class OllamaGui:
     def _quit(self) -> None:
         try:
             _save_geometry(self._root.geometry())
+        except Exception:
+            pass
+        try:
+            _save_darkmode(self._dark)
         except Exception:
             pass
         try:
