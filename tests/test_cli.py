@@ -10,8 +10,7 @@ from ollama_usage.cli import (
     _check_alert,
     display,
     _format_time_left,
-    _autorefresh_footer,
-    _next_refresh_str,
+    _autorefresh_sleep,
 )
 
 
@@ -290,25 +289,48 @@ class TestCLICountdownSilent:
 
 class TestAutorefreshFooter:
 
-    def test_next_refresh_str_format(self) -> None:
-        from datetime import datetime, timedelta
-        fixed = datetime(2026, 8, 8, 13, 46, 5)
-        with patch("ollama_usage.cli.datetime") as mock_dt:
-            mock_dt.now.return_value = fixed
-            mock_dt.timedelta = timedelta
-            result = _next_refresh_str(120)
-        assert result == "2026-08-08 13-48-05"
+    def test_autorefresh_sleep_on_non_tty_sleeps_once(self) -> None:
+        from ollama_usage.cli import _autorefresh_sleep
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=False), \
+             patch("ollama_usage.cli.time.sleep") as mock_sleep:
+            _autorefresh_sleep(120)
+        mock_sleep.assert_called_once_with(120)
 
-    def test_footer_contains_timestamps_and_interval(self, capsys) -> None:
+    def test_autorefresh_sleep_writes_single_countdown_line(self, capsys) -> None:
         from datetime import datetime, timedelta
+        from ollama_usage.cli import _autorefresh_sleep
         fixed = datetime(2026, 8, 8, 13, 46, 5)
         with patch("ollama_usage.cli.datetime") as mock_dt, \
-             patch("ollama_usage.cli.sys.stdout.isatty", return_value=False), \
+             patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
+             patch("ollama_usage.cli.time.sleep"), \
              patch.dict("os.environ", {"NO_COLOR": "1"}):
             mock_dt.now.return_value = fixed
             mock_dt.timedelta = timedelta
-            _autorefresh_footer(120)
+            _autorefresh_sleep(3)
         out = capsys.readouterr().out
-        assert "2026-08-08 13-46-05" in out
-        assert "next refresh in 120 seconds" in out
-        assert "2026-08-08 13-48-05" in out
+        # A blank line precedes the single \r-overwritten countdown line.
+        # The timestamp is fixed (calculated once) and the current time is
+        # never shown.
+        assert out.startswith("\n")
+        assert out.count("\n") == 1
+        assert "next refresh in" in out
+        assert "2026-08-08 13-46-08" in out
+        # The current time is NOT shown.
+        assert "13-46-05" not in out
+
+    def test_autorefresh_sleep_timestamp_is_fixed(self, capsys) -> None:
+        from datetime import datetime, timedelta
+        from ollama_usage.cli import _autorefresh_sleep
+        fixed = datetime(2026, 8, 8, 13, 46, 5)
+        with patch("ollama_usage.cli.datetime") as mock_dt, \
+             patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
+             patch("ollama_usage.cli.time.sleep"), \
+             patch.dict("os.environ", {"NO_COLOR": "1"}):
+            mock_dt.now.side_effect = [fixed, fixed, fixed]
+            mock_dt.timedelta = timedelta
+            _autorefresh_sleep(3)
+        out = capsys.readouterr().out
+        # The timestamp stays fixed across all countdown ticks (it appears on
+        # each \r rewrite, but always with the same value, never advancing).
+        assert "2026-08-08 13-46-08" in out
+        assert "13-46-09" not in out
