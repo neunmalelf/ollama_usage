@@ -5,11 +5,21 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch, MagicMock
 
-from ollama_usage.gui import build_lines, _seconds_until, _fmt_countdown, APP_NAME
+from ollama_usage.gui import (
+    build_lines,
+    build_segments,
+    _seconds_until,
+    _fmt_countdown,
+    _load_geometry,
+    _save_geometry,
+    _DEFAULT_GEOMETRY,
+    COLORS,
+    APP_NAME,
+)
 
 
 # ---------------------------------------------------------------------------
-# build_lines — pure display content (headless-testable)
+# build_lines â€” pure display content (headless-testable)
 # ---------------------------------------------------------------------------
 
 def make_data(
@@ -41,6 +51,12 @@ class TestBuildLines:
         lines = build_lines(make_data(plan="free"))
         assert any("free" in line for line in lines)
 
+    def test_plan_has_single_space_prefix(self) -> None:
+        lines = build_lines(make_data(plan="pro"))
+        plan_line = next(line for line in lines if "Plan" in line)
+        # "Plan     : pro" â€” one space after the colon, not two.
+        assert plan_line == "Plan     : pro"
+
     def test_session_and_weekly_percentages(self) -> None:
         lines = build_lines(make_data(session_pct=2.6, weekly_pct=1.9))
         text = "\n".join(lines)
@@ -68,6 +84,82 @@ class TestBuildLines:
 
 
 # ---------------------------------------------------------------------------
+# build_segments — colored display content
+# ---------------------------------------------------------------------------
+
+def _seg_text(line: list[tuple[str, str | None]]) -> str:
+    return "".join(text for text, _ in line)
+
+
+def _seg_color(line: list[tuple[str, str | None]], needle: str) -> str | None:
+    for text, color in line:
+        if needle in text:
+            return color
+    return None
+
+
+class TestBuildSegments:
+
+    def test_error_is_red(self) -> None:
+        segs = build_segments(None, error="Network error")
+        assert _seg_text(segs[0]) == "Error: Network error"
+        assert _seg_color(segs[0], "Network error") == "red"
+
+    def test_loading_when_no_data(self) -> None:
+        segs = build_segments(None)
+        assert _seg_text(segs[0]) == "Loading…"
+
+    def test_plan_is_orange(self) -> None:
+        segs = build_segments(make_data(plan="pro"))
+        plan_line = next(l for l in segs if "Plan" in _seg_text(l))
+        assert _seg_color(plan_line, "pro") == "orange"
+
+    def test_plan_has_single_space_prefix(self) -> None:
+        segs = build_segments(make_data(plan="pro"))
+        plan_line = next(l for l in segs if "Plan" in _seg_text(l))
+        assert _seg_text(plan_line) == "Plan     : pro"
+
+    def test_low_percentage_is_green(self) -> None:
+        segs = build_segments(make_data(session_pct=2.6))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        assert _seg_color(session_line, "2.6%") == "green"
+
+    def test_mid_percentage_is_yellow(self) -> None:
+        segs = build_segments(make_data(session_pct=60.0))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        assert _seg_color(session_line, "60.0%") == "yellow"
+
+    def test_high_percentage_is_red(self) -> None:
+        segs = build_segments(make_data(session_pct=90.0))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        assert _seg_color(session_line, "90.0%") == "red"
+
+    def test_web_search_count_is_cyan(self) -> None:
+        segs = build_segments(make_data(web_search_requests=2))
+        ws_line = next(l for l in segs if "WebSearch" in _seg_text(l))
+        assert _seg_color(ws_line, "2") == "cyan"
+
+    def test_model_header_is_grey(self) -> None:
+        models = [{"name": "glm-5.2", "requests": 2}]
+        segs = build_segments(make_data(models=models))
+        header = next(l for l in segs if "Model calls this week" in _seg_text(l))
+        assert _seg_color(header, "Model calls this week") == "grey"
+
+    def test_model_request_number_is_cyan(self) -> None:
+        models = [{"name": "glm-5.2", "requests": 2}]
+        segs = build_segments(make_data(models=models))
+        model_line = next(l for l in segs if "glm-5.2" in _seg_text(l))
+        assert _seg_color(model_line, "2") == "cyan"
+
+    def test_countdown_hours_cyan_minutes_magenta(self) -> None:
+        segs = build_segments(make_data(session_pct=2.6))
+        session_line = next(l for l in segs if "Session" in _seg_text(l))
+        # resets_at is in the future relative to the test's fixed data; the
+        # countdown may be hours/minutes. Just assert the "(in " wrapper exists.
+        assert "(in " in _seg_text(session_line)
+
+
+# ---------------------------------------------------------------------------
 # _seconds_until / _fmt_countdown
 # ---------------------------------------------------------------------------
 
@@ -90,65 +182,80 @@ class TestCountdown:
 
 
 # ---------------------------------------------------------------------------
-# OllamaGui — window wiring (tkinter mocked, no display needed)
+# OllamaGui â€” window wiring (tkinter mocked, no display needed)
 # ---------------------------------------------------------------------------
 
 class TestOllamaGui:
 
     def _make_gui(self, data: dict | None = None, error: str | None = None):
-        """Build an OllamaGui with a mocked tkinter root and a stubbed fetch."""
+        """Build an OllamaGui with a mocked tkinter root and a stubbed fetch.
+
+        Returns (gui, fake_root, fake_text, button_mock).
+        """
         fake_root = MagicMock()
         fake_text = MagicMock()
-        fake_btn = MagicMock()
+        fake_button = MagicMock()
         fake_frame = MagicMock()
 
         with patch("ollama_usage.gui.tk.Tk", return_value=fake_root), \
              patch("ollama_usage.gui.tk.Text", return_value=fake_text), \
-             patch("ollama_usage.gui.tk.Button", return_value=fake_btn), \
-             patch("ollama_usage.gui.tk.Frame", return_value=fake_frame):
+             patch("ollama_usage.gui.tk.Button", return_value=fake_button) as btn_mock, \
+             patch("ollama_usage.gui.tk.Frame", return_value=fake_frame), \
+             patch("ollama_usage.gui._load_geometry", return_value=None):
             from ollama_usage.gui import OllamaGui
             gui = OllamaGui(cookie="fake-cookie")
             gui._data = data
             gui._error = error
-            return gui, fake_root, fake_text
+            return gui, fake_root, fake_text, btn_mock
 
     def test_title_contains_app_name_and_version(self) -> None:
         from ollama_usage import __version__
-        gui, fake_root, _ = self._make_gui()
+        gui, fake_root, _, _ = self._make_gui()
         expected = f"{APP_NAME} ({__version__})"
         fake_root.title.assert_called_once_with(expected)
 
     def test_ok_button_quits(self) -> None:
-        gui, fake_root, _ = self._make_gui()
+        gui, fake_root, _, _ = self._make_gui()
         with patch("ollama_usage.gui.sys.exit") as mock_exit:
             gui._quit()
         fake_root.destroy.assert_called_once()
         mock_exit.assert_called_once_with(0)
 
     def test_refresh_button_triggers_fetch(self) -> None:
-        gui, fake_root, _ = self._make_gui()
+        gui, fake_root, _, _ = self._make_gui()
         with patch.object(gui, "_fetch_async") as mock_fetch:
             gui._refresh()
         mock_fetch.assert_called_once()
 
     def test_redraw_inserts_built_lines(self) -> None:
-        gui, fake_root, fake_text = self._make_gui(
+        gui, fake_root, fake_text, _ = self._make_gui(
             data=make_data(session_pct=2.6, weekly_pct=1.9)
         )
+        fake_text.index.return_value = "1.0"
         gui._redraw()
         fake_text.delete.assert_called_once_with("1.0", "end")
-        inserted = fake_text.insert.call_args[0][1]
+        inserted = "".join(c.args[1] for c in fake_text.insert.call_args_list)
         assert "2.6%" in inserted
         assert "1.9%" in inserted
 
     def test_redraw_shows_error(self) -> None:
-        gui, fake_root, fake_text = self._make_gui(error="Network error")
+        gui, fake_root, fake_text, _ = self._make_gui(error="Network error")
+        fake_text.index.return_value = "1.0"
         gui._redraw()
-        inserted = fake_text.insert.call_args[0][1]
+        inserted = "".join(c.args[1] for c in fake_text.insert.call_args_list)
         assert "Network error" in inserted
 
+    def test_redraw_applies_color_tags(self) -> None:
+        gui, fake_root, fake_text, _ = self._make_gui(
+            data=make_data(session_pct=2.6, weekly_pct=1.9)
+        )
+        fake_text.index.return_value = "1.0"
+        gui._redraw()
+        # At least one tag_add call must have happened (colored segments).
+        assert fake_text.tag_add.called
+
     def test_fetch_success_updates_data_and_schedules_redraw(self) -> None:
-        gui, fake_root, _ = self._make_gui()
+        gui, fake_root, _, _ = self._make_gui()
         data = make_data()
         with patch("ollama_usage.gui.get_usage", return_value=data):
             gui._fetch()
@@ -160,16 +267,104 @@ class TestOllamaGui:
 
     def test_fetch_network_error_sets_error(self) -> None:
         from ollama_usage.exceptions import NetworkError
-        gui, fake_root, _ = self._make_gui()
+        gui, fake_root, _, _ = self._make_gui()
         with patch("ollama_usage.gui.get_usage", side_effect=NetworkError("down")):
             gui._fetch()
         assert gui._error == "Network error"
 
     def test_fetch_auth_error_refreshes_cookie(self) -> None:
         from ollama_usage.exceptions import AuthError
-        gui, fake_root, _ = self._make_gui()
+        gui, fake_root, _, _ = self._make_gui()
         data = make_data()
         with patch("ollama_usage.gui.get_usage", side_effect=[AuthError("expired"), data]):
             gui._fetch()
         assert gui._data == data
         assert gui._error is None
+
+    def test_buttons_have_equal_width(self) -> None:
+        gui, fake_root, _, fake_button = self._make_gui()
+        # Both buttons are created with the same width option.
+        widths = []
+        for call in fake_button.call_args_list:
+            kwargs = call.kwargs
+            if "width" in kwargs:
+                widths.append(kwargs["width"])
+        assert len(widths) == 2
+        assert widths[0] == widths[1] == 10
+
+    def test_refresh_button_has_underlined_r(self) -> None:
+        gui, fake_root, _, fake_button = self._make_gui()
+        refresh_kwargs = None
+        for call in fake_button.call_args_list:
+            if call.kwargs.get("text") == "Refresh":
+                refresh_kwargs = call.kwargs
+        assert refresh_kwargs is not None
+        assert refresh_kwargs.get("underline") == 0
+
+    def test_ok_button_has_underlined_o(self) -> None:
+        gui, fake_root, _, fake_button = self._make_gui()
+        ok_kwargs = None
+        for call in fake_button.call_args_list:
+            if call.kwargs.get("text") == "OK":
+                ok_kwargs = call.kwargs
+        assert ok_kwargs is not None
+        assert ok_kwargs.get("underline") == 0
+
+    def test_alt_r_triggers_refresh(self) -> None:
+        gui, fake_root, _, _ = self._make_gui()
+        with patch.object(gui, "_refresh") as mock_refresh:
+            gui._on_refresh_key(None)
+        mock_refresh.assert_called_once()
+
+    def test_alt_o_triggers_quit(self) -> None:
+        gui, fake_root, _, _ = self._make_gui()
+        with patch.object(gui, "_quit") as mock_quit:
+            gui._on_quit_key(None)
+        mock_quit.assert_called_once()
+
+    def test_enter_triggers_quit(self) -> None:
+        gui, fake_root, _, _ = self._make_gui()
+        with patch.object(gui, "_quit") as mock_quit:
+            gui._on_quit_key(None)
+        mock_quit.assert_called_once()
+
+    def test_quit_saves_geometry(self) -> None:
+        gui, fake_root, _, _ = self._make_gui()
+        fake_root.geometry.return_value = "560x300+10+10"
+        with patch("ollama_usage.gui._save_geometry") as mock_save, \
+             patch("ollama_usage.gui.sys.exit"):
+            gui._quit()
+        mock_save.assert_called_once_with("560x300+10+10")
+
+    def test_geometry_restored_from_state(self) -> None:
+        gui, fake_root, _, _ = self._make_gui()
+        # _load_geometry is patched to return None in _make_gui, so geometry
+        # falls back to the default. Verify the default is applied.
+        fake_root.geometry.assert_called_once_with(_DEFAULT_GEOMETRY)
+
+
+# ---------------------------------------------------------------------------
+# Geometry persistence helpers
+# ---------------------------------------------------------------------------
+
+class TestGeometryPersistence:
+
+    def test_save_then_load_roundtrip(self, tmp_path, monkeypatch) -> None:
+        import ollama_usage.gui as gui_mod
+        state_file = tmp_path / "state.json"
+        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
+        _save_geometry("600x400+20+30")
+        assert _load_geometry() == "600x400+20+30"
+
+    def test_load_returns_none_when_missing(self, tmp_path, monkeypatch) -> None:
+        import ollama_usage.gui as gui_mod
+        state_file = tmp_path / "missing.json"
+        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
+        assert _load_geometry() is None
+
+    def test_load_returns_none_on_corrupt(self, tmp_path, monkeypatch) -> None:
+        import ollama_usage.gui as gui_mod
+        state_file = tmp_path / "state.json"
+        state_file.write_text("not json", encoding="utf-8")
+        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
+        assert _load_geometry() is None

@@ -285,6 +285,7 @@ Allow access to continue.
 - [x] Desktop notifications with `--notify`
 - [x] Environment variable support (`OLLAMA_BROWSER_COOKIE`)
 - [x] Web search usage statistics
+- [x] GUI window with `--gui`
 - [ ] Safari support
 - [ ] Migrate to official `/api/me` when available ([#12532](https://github.com/ollama/ollama/issues/12532))
 
