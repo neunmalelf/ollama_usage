@@ -73,6 +73,9 @@ ollama-usage --notify --watch --notify-threshold 75 --interval 60
 ollama-usage --debug
 ollama-usage --debug --browser firefox
 
+# GUI window (OK + Refresh buttons)
+ollama-usage --gui
+
 # Version
 ollama-usage --version
 
@@ -165,6 +168,35 @@ ollama-usage --notify --notify-threshold 75
 # Continuous monitoring with notifications
 ollama-usage --notify --watch
 ollama-usage --notify --watch --notify-threshold 75 --interval 60
+```
+
+---
+
+## GUI window
+
+`--gui` opens a simple, cross-platform window (Windows, Linux, macOS) that shows the same quota information as the CLI. It uses **tkinter** (Python stdlib), so no extra dependency is required.
+
+- The window title shows the app name and version: `ollama-usage (<version>)`.
+- An **OK** button closes the app.
+- A **Refresh** button re-fetches the data and redraws the window.
+
+```bash
+# Open the GUI window
+ollama-usage --gui
+
+# With a manual cookie
+ollama-usage --gui --cookie YOUR_SESSION_COOKIE
+```
+
+> On minimal Linux installs, tkinter may need to be installed separately:
+> `sudo apt install python3-tk`
+
+### Python usage
+```python
+from ollama_usage.gui import launch_gui
+from ollama_usage.cookie import get_cookie_auto
+
+launch_gui(cookie=get_cookie_auto)
 ```
 
 ---

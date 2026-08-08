@@ -267,6 +267,9 @@ def main():
         help="Threshold for desktop notifications in %% (default: 80, requires --notify)",
     )
     parser.add_argument("--widget", action="store_true", help="Launch desktop widget")
+    parser.add_argument(
+        "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
+    )
     parser.add_argument("--theme", default="dark", choices=["dark", "light", "minimal"])
     parser.add_argument("--size", default="full", choices=["compact", "full"])
     parser.add_argument("--opacity", type=float, default=0.92, metavar="0.0-1.0")
@@ -316,6 +319,12 @@ def main():
                 "pip install ollama-usage[notify]",
                 file=sys.stderr,
             )
+
+        if args.gui:
+            from ollama_usage.gui import launch_gui
+
+            launch_gui(cookie=cookie if args.cookie else get_current_cookie)
+            return
 
         if args.widget:
             from ollama_usage.widget import launch_widget
