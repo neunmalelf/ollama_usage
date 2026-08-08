@@ -24,9 +24,32 @@ logger = logging.getLogger(__name__)
 
 APP_NAME = "ollama-usage"
 
-# Application icon (ICO). Resolved relative to the package directory so it
-# works both from a source checkout and an installed package.
-_ICON_PATH = pathlib.Path(__file__).resolve().parent.parent / "icon.ico"
+
+def _resolve_icon() -> pathlib.Path:
+    """Locate icon.ico across source checkout, PyInstaller, and Nuitka builds.
+
+    - Source checkout / installed package: icon.ico sits in the project root,
+      one level above the package dir.
+    - PyInstaller onefile: data files are extracted to ``sys._MEIPASS``.
+    - Nuitka onefile: bundled data files land next to the compiled module, so
+      ``__file__``'s directory (or its parent) holds icon.ico.
+    """
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        p = pathlib.Path(meipass) / "icon.ico"
+        if p.is_file():
+            return p
+
+    here = pathlib.Path(__file__).resolve().parent
+    for candidate in (here / "icon.ico", here.parent / "icon.ico"):
+        if candidate.is_file():
+            return candidate
+    return here.parent / "icon.ico"
+
+
+# Application icon (ICO). Resolved at import time so it works from a source
+# checkout, an installed package, and frozen (PyInstaller/Nuitka) builds.
+_ICON_PATH = _resolve_icon()
 
 # State file used to persist the window size and position between runs.
 _STATE_FILE = pathlib.Path.home() / ".ollama-usage-gui.json"
