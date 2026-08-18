@@ -1,5 +1,4 @@
 import argparse
-import itertools
 import json
 import logging
 import os
@@ -207,21 +206,15 @@ def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
     return False
 
 
-def _watch_countdown(interval: int) -> None:
-    """Animated countdown before next refresh."""
-    if not sys.stdout.isatty():
-        time.sleep(interval)
-        return
-    spinner = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-    for remaining in range(interval, 0, -1):
-        for _ in range(10):
-            sys.stdout.write(
-                f"\r{next(spinner)} Refreshing in {remaining}s — Ctrl+C to quit  "
-            )
-            sys.stdout.flush()
-            time.sleep(0.1)
-    sys.stdout.write("\r" + " " * 50 + "\r")
-    sys.stdout.flush()
+def _next_refresh_timestamp(seconds_from_now: int) -> str:
+    """Return the next-refresh timestamp as ``YYYY-MM-DD hh-mm-ss``.
+
+    The timestamp is ``now + seconds_from_now`` and is fixed once calculated.
+    Reusable by both the CLI footer and the GUI.
+    """
+    return (datetime.now() + timedelta(seconds=seconds_from_now)).strftime(
+        "%Y-%m-%d %H-%M-%S"
+    )
 
 
 def _autorefresh_sleep(interval: int) -> None:
@@ -236,9 +229,7 @@ def _autorefresh_sleep(interval: int) -> None:
         return
     use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
     # Fixed timestamp: now + interval, calculated once and never changed.
-    next_str = (datetime.now() + timedelta(seconds=interval)).strftime(
-        "%Y-%m-%d %H-%M-%S"
-    )
+    next_str = _next_refresh_timestamp(interval)
     print()  # blank line before the footer
     for remaining in range(interval, 0, -1):
         if use_color:
@@ -267,7 +258,6 @@ def main():
     parser.add_argument(
         "--browser", type=str, choices=BROWSERS.keys(), help="Force a specific browser"
     )
-    parser.add_argument("--watch", action="store_true", help="Refresh continuously")
     parser.add_argument(
         "--autorefresh",
         nargs="?",
@@ -277,12 +267,6 @@ def main():
         metavar="SECONDS",
         help="Refresh continuously every SECONDS seconds (default: 120). "
         "Shows a timestamp footer with the next refresh time.",
-    )
-    parser.add_argument(
-        "--interval",
-        type=int,
-        default=30,
-        help="Refresh interval in seconds (default: 30, min: 10, max: 3600, requires --watch)",
     )
     parser.add_argument(
         "--alert",
@@ -325,17 +309,12 @@ def main():
     if _HAS_COLOR:
         _enable_windows_vt()
 
-    if args.interval != 30 and not args.watch:
-        print("Warning: --interval has no effect without --watch.", file=sys.stderr)
-
     try:
         if args.debug:
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             )
-
-        interval = max(10, min(3600, args.interval))
 
         def get_current_cookie() -> str:
             if args.cookie:
@@ -372,7 +351,7 @@ def main():
 
             launch_widget(
                 cookie=cookie if args.cookie else get_current_cookie,
-                interval=interval,
+                interval=30,
                 theme=args.theme,
                 size=args.size,
                 opacity=args.opacity,
@@ -428,58 +407,12 @@ def main():
             except KeyboardInterrupt:
                 print("\nStopped.")
 
-        if args.watch:
-            try:
-                while True:
-                    # Effacement terminal sans passer par un shell (évite os.system)
-                    sys.stdout.write("\033[2J\033[H")
-                    sys.stdout.flush()
-                    try:
-                        data = get_usage(cookie)
-                        display(data, args.json, args.quiet)
-                        if args.notify:
-                            check_and_notify(data, args.notify_threshold, notify_state)
-                        if _check_alert(data, args.alert, args.quiet):
-                            alert_triggered = True
-                    except AuthError as e:
-                        if args.cookie:
-                            print(f"Error: {e}", file=sys.stderr)
-                            raise SystemExit(1)
-                        else:
-                            try:
-                                logger.info(
-                                    "Cookie expired/invalid. Attempting auto-refresh..."
-                                )
-                                cookie = get_current_cookie()
-                                data = get_usage(cookie)
-                                display(data, args.json, args.quiet)
-                                if args.notify:
-                                    check_and_notify(
-                                        data, args.notify_threshold, notify_state
-                                    )
-                                if _check_alert(data, args.alert, args.quiet):
-                                    alert_triggered = True
-                            except Exception as refresh_err:
-                                print(
-                                    f"Cookie auto-refresh failed: {refresh_err}",
-                                    file=sys.stderr,
-                                )
-                                raise SystemExit(1)
-                    except NetworkError as e:
-                        print(
-                            f"Network error: {e} — retrying in {interval}s",
-                            file=sys.stderr,
-                        )
-                    _watch_countdown(interval)
-            except KeyboardInterrupt:
-                print("\nStopped.")
-        else:
-            data = get_usage(cookie)
-            display(data, args.json, args.quiet)
-            if args.notify:
-                check_and_notify(data, args.notify_threshold, notify_state)
-            if _check_alert(data, args.alert, args.quiet):
-                alert_triggered = True
+        data = get_usage(cookie)
+        display(data, args.json, args.quiet)
+        if args.notify:
+            check_and_notify(data, args.notify_threshold, notify_state)
+        if _check_alert(data, args.alert, args.quiet):
+            alert_triggered = True
 
         if alert_triggered:
             raise SystemExit(1)

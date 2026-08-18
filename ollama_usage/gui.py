@@ -13,11 +13,18 @@ import pathlib
 import sys
 import threading
 import tkinter as tk
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from ollama_usage import __version__ as _pkg_version
+from ollama_usage.cli import _next_refresh_timestamp
 from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError
+
+
+def _gui_refresh_timestamp(seconds_from_now: int) -> str:
+    """Return ``YYYY-MM-DD hh:mm:ss`` (colons) for the next refresh time."""
+    dash = _next_refresh_timestamp(seconds_from_now)
+    return f"{dash[:10]} {dash[11:13]}:{dash[14:16]}:{dash[17:19]}"
 from ollama_usage.scraper import get_usage
 
 logger = logging.getLogger(__name__)
@@ -406,6 +413,7 @@ class OllamaGui:
 
         buttons = tk.Frame(self._root, bg=self._bg)
         buttons.pack(fill="x", padx=8, pady=(0, 8))
+        self._buttons = buttons
 
         # Both buttons share the same width so they line up.
         self._refresh_btn = tk.Button(
@@ -435,7 +443,15 @@ class OllamaGui:
             bg=self._bg, fg=self._fg, insertbackground=self._fg,
         )
         self._autorefresh_entry.pack(side="left", padx=2)
-        self._autorefresh_entry.bind("<Return>", self._on_autorefresh_enter)
+        # Any change to the field immediately recalculates the timestamp and
+        # saves the new value.
+        self._autorefresh_var.trace_add("write", self._on_autorefresh_changed)
+
+        self._autorefresh_ts_lbl = tk.Label(
+            buttons, bg=self._bg, fg=self._fg
+        )
+        self._autorefresh_ts_lbl.pack(side="left", padx=(8, 2))
+        self._update_autorefresh_timestamp()
 
         self._ok_btn = tk.Button(
             buttons, text="OK", underline=0, width=10, command=self._quit,
@@ -486,13 +502,29 @@ class OllamaGui:
         self._save_autorefresh_from_field()
         return "break"
 
-    def _save_autorefresh_from_field(self) -> None:
-        """Read the autorefresh field and persist it (best-effort)."""
+    def _on_autorefresh_changed(self, *_args) -> None:
+        """React to a change in the autorefresh field."""
+        self._save_autorefresh_from_field()
+
+    def _current_autorefresh_seconds(self) -> int:
+        """Return the current value in the autorefresh field (clamped >= 1)."""
         try:
             seconds = int(self._autorefresh_var.get().strip())
         except (ValueError, AttributeError):
             seconds = _DEFAULT_AUTOREFRESH
+        return max(1, seconds)
+
+    def _update_autorefresh_timestamp(self) -> None:
+        """Refresh the 'at <timestamp>' label after the autorefresh field."""
+        seconds = self._current_autorefresh_seconds()
+        ts = _gui_refresh_timestamp(seconds)
+        self._autorefresh_ts_lbl.configure(text=f"at {ts}")
+
+    def _save_autorefresh_from_field(self) -> None:
+        """Read the autorefresh field and persist it (best-effort)."""
+        seconds = self._current_autorefresh_seconds()
         _save_autorefresh(seconds)
+        self._update_autorefresh_timestamp()
 
     # ---------------------------------------------------------------- theme
 
@@ -509,15 +541,22 @@ class OllamaGui:
         for name, hex_color in self._colors.items():
             self._text.tag_configure(name, foreground=hex_color)
 
-        for widget in (self._refresh_btn, self._ok_btn, self._dark_ck,
-                       self._autorefresh_lbl, self._autorefresh_entry):
+        # Buttons and the checkbox accept active colors; Label/Entry do not.
+        for widget in (self._refresh_btn, self._ok_btn, self._dark_ck):
             widget.configure(
                 bg=self._bg, fg=self._fg,
                 activebackground=self._bg, activeforeground=self._fg,
             )
-        self._autorefresh_entry.configure(insertbackground=self._fg)
-        self._dark_ck.configure(selectcolor=self._bg)
-        self._refresh_btn.master.configure(bg=self._bg)
+        self._autorefresh_lbl.configure(bg=self._bg, fg=self._fg)
+        self._autorefresh_entry.configure(
+            bg=self._bg, fg=self._fg, insertbackground=self._fg
+        )
+        self._autorefresh_ts_lbl.configure(bg=self._bg, fg=self._fg)
+        self._update_autorefresh_timestamp()
+        # Keep the checkbox indicator a fixed contrasting color so the checkmark
+        # stays visible in both light and dark mode (selectcolor = indicator bg).
+        self._dark_ck.configure(selectcolor="#666666")
+        self._buttons.configure(bg=self._bg)
         self._redraw()
 
     def _fetch_async(self) -> None:

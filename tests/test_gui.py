@@ -38,7 +38,7 @@ def make_data(
     return {
         "plan": plan,
         "session": {"used_pct": session_pct, "resets_at": "2026-08-05T20:00:00Z"},
-        "weekly": {"used_pct": weekly_pct, "resets_at": "2026-08-10T00:00:00Z"},
+        "weekly": {"used_pct": weekly_pct, "resets_at": "2099-01-01T00:00:00Z"},
         "web_search_requests": web_search_requests,
         "models": models,
     }
@@ -213,7 +213,8 @@ class TestBuildSegments:
         assert "(in " in _seg_text(session_line)
 
     def test_countdown_unit_labels_white(self) -> None:
-        segs = build_segments(make_data(session_pct=2.6))
+        # Use a far-future weekly date so the countdown has days/hours/minutes.
+        segs = build_segments(make_data(session_pct=2.6, weekly_pct=1.9))
         weekly_line = next(l for l in segs if "Weekly" in _seg_text(l))
         # The 'd', 'h' and 'm' unit labels are white.
         labels = {text: color for text, color in weekly_line if text in ("d", "h", "m")}
@@ -222,7 +223,8 @@ class TestBuildSegments:
         assert labels.get("m") == "white"
 
     def test_countdown_days_orange(self) -> None:
-        segs = build_segments(make_data(session_pct=2.6))
+        # Use a far-future weekly date so the countdown has a days component.
+        segs = build_segments(make_data(session_pct=2.6, weekly_pct=1.9))
         weekly_line = next(l for l in segs if "Weekly" in _seg_text(l))
         # The days number is orange.
         days_num = next(
@@ -552,6 +554,24 @@ class TestDarkMode:
         assert check_kwargs is not None
         assert check_kwargs.get("underline") == 0
 
+    def test_toggle_dark_does_not_crash_on_label_entry(self) -> None:
+        # Regression: _toggle_dark previously passed activebackground to Label/
+        # Entry, which raised TclError. It must complete without error and
+        # keep the checkbox indicator visible (fixed selectcolor).
+        gui, fake_root, fake_text, _, check_mock, _ = _make_gui()
+        gui._dark_var.get.return_value = True
+        gui._toggle_dark()  # must not raise
+        assert gui._dark is True
+        # selectcolor is set to a fixed contrasting color (not the background).
+        gui._dark_ck.configure.assert_any_call(selectcolor="#666666")
+
+    def test_toggle_dark_off_keeps_checkbox_visible(self) -> None:
+        gui, fake_root, fake_text, _, check_mock, _ = _make_gui()
+        gui._dark_var.get.return_value = False
+        gui._toggle_dark()  # must not raise
+        assert gui._dark is False
+        gui._dark_ck.configure.assert_any_call(selectcolor="#666666")
+
     def test_alt_d_toggles_darkmode(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
         gui._dark_var.get.return_value = False
@@ -611,3 +631,48 @@ class TestAutorefresh:
              patch("ollama_usage.gui.sys.exit"):
             gui._quit()
         mock_save.assert_called_once()
+
+    def test_gui_refresh_timestamp_uses_colons(self) -> None:
+        from datetime import datetime, timedelta
+        from ollama_usage.gui import _gui_refresh_timestamp
+        fixed = datetime(2026, 8, 8, 13, 46, 5)
+        # _gui_refresh_timestamp delegates to cli's helper which uses
+        # ollama_usage.cli.datetime.
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed
+            mock_dt.timedelta = timedelta
+            result = _gui_refresh_timestamp(120)
+        assert result == "2026-08-08 13:48:05"
+
+    def test_timestamp_label_shows_at_timestamp(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        gui._autorefresh_var.get.return_value = "120"
+        with patch("ollama_usage.gui._gui_refresh_timestamp", return_value="2026-08-08 13:48:05"):
+            gui._update_autorefresh_timestamp()
+        gui._autorefresh_ts_lbl.configure.assert_called_with(
+            text="at 2026-08-08 13:48:05"
+        )
+
+    def test_trace_registered_on_var(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        # A write trace is registered on the StringVar to react to changes.
+        gui._autorefresh_var.trace_add.assert_called_once()
+        mode, cb = gui._autorefresh_var.trace_add.call_args.args
+        assert mode == "write"
+        assert cb == gui._on_autorefresh_changed
+
+    def test_on_autorefresh_changed_saves_and_updates(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        gui._autorefresh_var.get.return_value = "600"
+        with patch.object(gui, "_save_autorefresh_from_field") as mock_save:
+            gui._on_autorefresh_changed()
+        mock_save.assert_called_once()
+
+    def test_save_autorefresh_from_field_updates_timestamp(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        gui._autorefresh_var.get.return_value = "300"
+        with patch("ollama_usage.gui._save_autorefresh") as mock_save, \
+             patch.object(gui, "_update_autorefresh_timestamp") as mock_update:
+            gui._save_autorefresh_from_field()
+        mock_save.assert_called_once_with(300)
+        mock_update.assert_called_once()
