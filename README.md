@@ -46,11 +46,6 @@ ollama-usage
 # One-line usage
 OLLAMA_BROWSER_COOKIE=YOUR_SESSION_COOKIE ollama-usage --json
 
-# Watch mode (refresh every 30s)
-ollama-usage --watch
-ollama-usage --watch --json
-ollama-usage --watch --interval 60
-
 # Autorefresh mode (default 120s, shows next-refresh timestamp footer)
 ollama-usage --autorefresh
 ollama-usage --autorefresh 60
@@ -68,11 +63,11 @@ ollama-usage --notify
 # One-shot — notify if usage exceeds 75%
 ollama-usage --notify --notify-threshold 75
 
-# Watch mode — notify when threshold is crossed, no spam between ticks
-ollama-usage --notify --watch
+# Autorefresh — notify when threshold is crossed, no spam between ticks
+ollama-usage --notify --autorefresh
 
-# Watch mode — custom threshold and refresh interval
-ollama-usage --notify --watch --notify-threshold 75 --interval 60
+# Autorefresh — custom threshold and refresh interval
+ollama-usage --notify --autorefresh 60 --notify-threshold 75
 
 # Debug mode
 ollama-usage --debug
@@ -87,7 +82,7 @@ ollama-usage --widget --theme light
 ollama-usage --widget --size compact
 ollama-usage --widget --opacity 0.8
 ollama-usage --widget --position bottom-right
-ollama-usage --widget --theme minimal --size compact --position top-right --interval 60
+ollama-usage --widget --theme minimal --size compact --position top-right
 
 # Version
 ollama-usage --version
@@ -169,7 +164,7 @@ Two levels are fired automatically:
 - ⚠️ **Warning** — at the configured threshold (default: 80%)
 - 🔴 **Critical** — 15% above the threshold (capped at 100%)
 
-Each level notifies **once per threshold crossing** — no spam during `--watch`.  
+Each level notifies **once per threshold crossing** — no spam during `--autorefresh`.  
 If usage drops back below the threshold, the notification will fire again if it rises once more.
 ```bash
 # One-shot — notify if usage exceeds 80%
@@ -179,8 +174,8 @@ ollama-usage --notify
 ollama-usage --notify --notify-threshold 75
 
 # Continuous monitoring with notifications
-ollama-usage --notify --watch
-ollama-usage --notify --watch --notify-threshold 75 --interval 60
+ollama-usage --notify --autorefresh
+ollama-usage --notify --autorefresh 60 --notify-threshold 75
 ```
 
 ---
@@ -223,7 +218,7 @@ launch_gui(cookie=get_cookie_auto)
 
 - **Frameless** and draggable — click and drag anywhere to move it.
 - **Right-click** opens a context menu: refresh now, toggle size, or close.
-- **Auto-refreshes** every `--interval` seconds (default 30, min 10).
+- **Auto-refreshes** every 30 seconds.
 - Remembers its last position between runs (unless `--position` is given).
 
 ### Options
@@ -234,14 +229,13 @@ launch_gui(cookie=get_cookie_auto)
 | `--size` | `full`, `compact` | `full` | `full` shows bars + countdown; `compact` shows text only |
 | `--opacity` | `0.1` – `1.0` | `0.92` | Window transparency |
 | `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |
-| `--interval` | seconds (min 10) | `30` | Auto-refresh interval |
 
 ```bash
 # Default widget (dark, full, top-right)
 ollama-usage --widget
 
-# Light theme, compact, bottom-right, refresh every 60s
-ollama-usage --widget --theme light --size compact --position bottom-right --interval 60
+# Light theme, compact, bottom-right
+ollama-usage --widget --theme light --size compact --position bottom-right
 
 # Semi-transparent minimal widget
 ollama-usage --widget --theme minimal --opacity 0.8
@@ -345,7 +339,7 @@ Allow access to continue.
 - [x] CLI with `--json`, `--browser`, `--cookie`
 - [x] Python library API
 - [x] Auto browser detection
-- [x] `--watch` mode
+- [x] `--autorefresh` mode
 - [x] Colored output
 - [x] `--alert` and `--quiet` for scripting
 - [x] Desktop notifications with `--notify`

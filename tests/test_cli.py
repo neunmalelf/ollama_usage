@@ -11,6 +11,7 @@ from ollama_usage.cli import (
     display,
     _format_time_left,
     _autorefresh_sleep,
+    _next_refresh_timestamp,
 )
 
 
@@ -198,27 +199,27 @@ class TestDisplay:
 
 
 # ---------------------------------------------------------------------------
-# Interval clamping
+# Autorefresh interval
 # ---------------------------------------------------------------------------
 
-class TestIntervalClamping:
-    """Vérifie que l'intervalle est borné entre 10 et 3600 dans main()."""
+class TestAutorefreshInterval:
+    """Vérifie que l'intervalle d'autorefresh est utilisé dans main()."""
 
-    def _run_main_interval(self, interval_arg: int) -> int:
-        """Lance main() et retourne l'intervalle effectivement utilisé dans _watch_countdown."""
+    def _run_main_autorefresh(self, interval_arg: int) -> int:
+        """Lance main() et retourne l'intervalle effectivement utilisé dans _autorefresh_sleep."""
         captured = {}
 
-        def fake_countdown(iv):
+        def fake_sleep(iv):
             captured["interval"] = iv
-            raise KeyboardInterrupt  # stoppe la boucle watch après 1 tour
+            raise KeyboardInterrupt  # stoppe la boucle après 1 tour
 
         fake_data = make_data(10.0, 10.0)
 
         with patch("ollama_usage.cli.get_cookie_auto", return_value="fake-cookie"), \
              patch("ollama_usage.cli.get_usage", return_value=fake_data), \
-             patch("ollama_usage.cli._watch_countdown", side_effect=fake_countdown), \
+             patch("ollama_usage.cli._autorefresh_sleep", side_effect=fake_sleep), \
              patch("ollama_usage.cli.sys.stdout.write"), \
-             patch("sys.argv", ["ollama-usage", "--watch", "--quiet", "--interval", str(interval_arg)]):
+             patch("sys.argv", ["ollama-usage", "--autorefresh", str(interval_arg), "--quiet"]):
             try:
                 from ollama_usage.cli import main
                 main()
@@ -227,20 +228,14 @@ class TestIntervalClamping:
 
         return captured.get("interval", -1)
 
-    def test_interval_below_min_is_clamped_to_10(self) -> None:
-        assert self._run_main_interval(0) == 10
+    def test_autorefresh_interval_used(self) -> None:
+        assert self._run_main_autorefresh(60) == 60
 
-    def test_interval_of_1_is_clamped_to_10(self) -> None:
-        assert self._run_main_interval(1) == 10
+    def test_autorefresh_interval_1_is_kept(self) -> None:
+        assert self._run_main_autorefresh(1) == 1
 
-    def test_interval_above_max_is_clamped_to_3600(self) -> None:
-        assert self._run_main_interval(9999) == 3600
-
-    def test_valid_interval_is_unchanged(self) -> None:
-        assert self._run_main_interval(60) == 60
-
-    def test_default_interval_30_is_unchanged(self) -> None:
-        assert self._run_main_interval(30) == 30
+    def test_autorefresh_interval_large_is_kept(self) -> None:
+        assert self._run_main_autorefresh(1200) == 1200
 
 
 # ---------------------------------------------------------------------------
@@ -273,21 +268,20 @@ class TestCLIColoration:
         assert _color_pct(75.0) == expected
 
 
-class TestCLICountdownSilent:
-
-    @patch("ollama_usage.cli.sys.stdout.isatty", return_value=False)
-    @patch("ollama_usage.cli.time.sleep")
-    def test_countdown_silent_on_non_tty(self, mock_sleep, mock_isatty) -> None:
-        from ollama_usage.cli import _watch_countdown
-        _watch_countdown(30)
-        mock_sleep.assert_called_once_with(30)
-
-
 # ---------------------------------------------------------------------------
 # Autorefresh footer
 # ---------------------------------------------------------------------------
 
 class TestAutorefreshFooter:
+
+    def test_next_refresh_timestamp_format(self) -> None:
+        from datetime import datetime, timedelta
+        fixed = datetime(2026, 8, 8, 13, 46, 5)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed
+            mock_dt.timedelta = timedelta
+            result = _next_refresh_timestamp(120)
+        assert result == "2026-08-08 13-48-05"
 
     def test_autorefresh_sleep_on_non_tty_sleeps_once(self) -> None:
         from ollama_usage.cli import _autorefresh_sleep

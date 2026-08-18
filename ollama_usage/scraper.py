@@ -126,10 +126,29 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
     This function is section-aware and does not depend on order.
     It finds each usage section by its label and extracts the corresponding
     percentage and reset time from within that section.
+
+    The usage meters on the page carry an aria-label (e.g.
+    ``aria-label="Session usage 45.0% used"``) that sits right next to the
+    meter's own ``data-time`` attribute. The visible label span can appear
+    earlier in the DOM (e.g. in a summary), so the LAST occurrence of each
+    marker is used — that lands on the meter itself, and the ``data-time``
+    found right after it belongs to that same section.
     """
+    lower = html.lower()
+
+    def locate(label: str) -> int:
+        """Return the position of a usage section's meter.
+
+        Prefer the meter's aria-label; fall back to the plain label span.
+        """
+        pos = lower.rfind(f'aria-label="{label}')
+        if pos == -1:
+            pos = lower.rfind(label)
+        return pos
+
     # Find positions of each section marker
-    session_pos = html.lower().find(_SESSION_MARKER)
-    weekly_pos = html.lower().find(_WEEKLY_MARKER)
+    session_pos = locate(_SESSION_MARKER)
+    weekly_pos = locate(_WEEKLY_MARKER)
 
     if session_pos == -1 and weekly_pos == -1:
         # Fallback to position-based extraction if sections not found

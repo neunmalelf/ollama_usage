@@ -49,6 +49,42 @@ def make_html(
     """
 
 
+def make_html_real(
+    plan: str = "free",
+    session_pct: float = 0.0,
+    session_time: str = "2026-08-18T08:00:00Z",
+    weekly_pct: float = 27.9,
+    weekly_time: str = "2026-08-24T00:00:00Z",
+    aria_labels: bool = True,
+) -> str:
+    """Build HTML matching the current ollama.com/settings layout.
+
+    The visible label spans appear early in the DOM (summary), while the
+    usage meters carrying the aria-labels and data-time attributes come
+    later. This reproduces the bug where the weekly line showed the
+    session's reset time.
+    """
+    def meter(label: str, pct: float, resets_at: str) -> str:
+        attrs = f' aria-label="{label} {pct}% used"' if aria_labels else ""
+        return (
+            f'<div class="usage-meter"{attrs}>'
+            f"<span>{label}</span>"
+            f"<span>{pct}% used</span>"
+            f'<div class="local-time" data-time="{resets_at}">Resets soon</div>'
+            "</div>"
+        )
+
+    return f"""
+    <span class="capitalize">{plan}</span>
+    <div class="text-sm">Session usage</div>
+    <div class="text-sm">{session_pct}% used</div>
+    <div class="text-sm">Weekly usage</div>
+    <div class="text-sm">{weekly_pct}% used</div>
+    {meter("Session usage", session_pct, session_time)}
+    {meter("Weekly usage", weekly_pct, weekly_time)}
+    """
+
+
 def make_html_reversed(
     plan: str = "free",
     session_pct: float = 0.0,
@@ -349,6 +385,54 @@ class TestReversedOrderParsing:
         data = parse_html(html)
         assert data["session"]["used_pct"] == session_pct
         assert data["weekly"]["used_pct"] == weekly_pct
+
+
+# ---------------------------------------------------------------------------
+# Real page layout (summary labels before usage meters)
+# ---------------------------------------------------------------------------
+
+class TestRealPageLayout:
+    """Regression: the weekly line showed the session's reset time.
+
+    On the real page the visible label spans appear early in the DOM while
+    the usage meters (with their own aria-labels and data-time attributes)
+    come later, so the first ``data-time`` after the weekly label is the
+    session's. The parser must anchor each section on its own meter.
+    """
+
+    def test_weekly_resets_at_is_not_session_resets_at(self) -> None:
+        data = parse_html(make_html_real())
+        assert data["weekly"]["resets_at"] == "2026-08-24T00:00:00Z"
+        assert data["session"]["resets_at"] == "2026-08-18T08:00:00Z"
+        assert data["weekly"]["resets_at"] != data["session"]["resets_at"]
+
+    def test_percentages_correct(self) -> None:
+        data = parse_html(make_html_real(session_pct=1.5, weekly_pct=42.3))
+        assert data["session"]["used_pct"] == 1.5
+        assert data["weekly"]["used_pct"] == 42.3
+
+    def test_full_structure(self) -> None:
+        data = parse_html(make_html_real(
+            plan="pro",
+            session_pct=45.0,
+            session_time="2026-08-18T08:00:00Z",
+            weekly_pct=80.0,
+            weekly_time="2026-08-24T00:00:00Z",
+        ))
+        assert data == {
+            "plan": "pro",
+            "session": {"used_pct": 45.0, "resets_at": "2026-08-18T08:00:00Z"},
+            "weekly": {"used_pct": 80.0, "resets_at": "2026-08-24T00:00:00Z"},
+            "web_search_requests": None,
+            "models": None,
+        }
+
+    def test_works_without_aria_labels(self) -> None:
+        """Fall back to the plain label when the meters lack aria-labels."""
+        data = parse_html(make_html_real(aria_labels=False))
+        assert data["session"]["resets_at"] == "2026-08-18T08:00:00Z"
+        assert data["weekly"]["resets_at"] == "2026-08-24T00:00:00Z"
+        assert data["weekly"]["used_pct"] == 27.9
 
 
 # ---------------------------------------------------------------------------
