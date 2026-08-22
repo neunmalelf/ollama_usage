@@ -200,6 +200,11 @@ def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -
     if as_json:
         print(json.dumps(data, indent=2))
     elif minidisplay:
+        # Clear the terminal first so only the minidisplay line is visible
+        # (no leftover prompt). Only when stdout is a TTY.
+        if sys.stdout.isatty():
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
         print(_mini_line(data, _use_color()))
     else:
         use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
