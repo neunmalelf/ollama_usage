@@ -1,0 +1,223 @@
+#!/bin/bash
+# _build - build ollama-usage into a single self-contained binary with Nuitka
+#          and optionally release it via gh.
+#   usage: ./_build [OPTIONS]
+#   options:
+#     --release     build, tag with version, and create a GitHub release via gh CLI
+#     -h, --help    show this help and exit
+#     --version     show the _build version and exit
+#   produces: dist/ollama-usage[.exe] - one binary with Python + stdlib +
+#             ollama_usage bundled. The end user needs NO Python, venv or pip.
+#
+# On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
+# --zig flag (Nuitka downloads the Zig compiler automatically on first build).
+
+__VERSION__="1.0.0"
+
+set -e
+
+cd "$(dirname "$0")"
+
+DO_RELEASE=0
+
+# --- usage -------------------------------------------------------------------
+usage() {
+    cat <<EOF
+_build v${__VERSION__} - build ollama-usage into a single binary with Nuitka
+
+usage: ./_build [OPTIONS]
+
+options:
+  --release     build binary, tag with automated version (v<version>), and publish release via 'gh'
+  -h, --help    show this help and exit
+  --version     show the _build version and exit
+
+output: dist/ollama-usage[.exe] - one self-contained binary with Python + stdlib +
+        ollama_usage bundled. The end user needs NO Python, venv or pip installed.
+
+exit code: 0 on success, 1 on failure
+EOF
+}
+
+# --- argument parsing --------------------------------------------------------
+case "${1:-}" in
+    -h|--help)  usage; exit 0 ;;
+    --version)  echo "[_build] v${__VERSION__}"; exit 0 ;;
+    --release)  DO_RELEASE=1 ;;
+    "")         : ;;
+    *)          echo "[_build] unknown option: ${1}" >&2; usage >&2; exit 1 ;;
+esac
+
+echo ""
+echo "[_build] v${__VERSION__} - build ollama-usage standalone binary"
+echo ""
+
+# --- configuration -----------------------------------------------------------
+PACKAGE="ollama_usage"
+ENTRY_POINT="ollama_usage/cli.py"
+OUTPUT_NAME="ollama-usage.exe"
+OUTPUT_DIR="dist"
+ICON="icon.ico"
+
+# --- get version from the source __version__ ---------------------------------
+VERSION=$(python -c "from ollama_usage import __version__; print(__version__)" 2>/dev/null || echo "0.0.0")
+[ -n "$VERSION" ] || VERSION="0.0.0"
+echo "[_build] ollama-usage version: $VERSION"
+
+# Windows version metadata (16-bit fields, max 65535; collapse long digit runs
+# like a YYYYMMDDhhmmss timestamp into the first 5 digits).
+WIN_VERSION=$(python -c "
+import re
+from ollama_usage import __version__ as v
+parts = [p for p in re.split(r'[^0-9]+', str(v)) if p]
+parts = [str(max(0, min(65535, int(p[:5])))) for p in parts]
+while len(parts) < 4:
+    parts.append('0')
+print('.'.join(parts[:4]))
+" 2>/dev/null || echo "0.0.0.0")
+
+# --- ensure nuitka -----------------------------------------------------------
+if ! python -c "import nuitka" >/dev/null 2>&1; then
+    echo "[_build] installing nuitka via pip..."
+    python -m pip install --upgrade nuitka || { echo "[_build] nuitka install FAILED" >&2; exit 1; }
+fi
+
+# --- clean previous builds ---------------------------------------------------
+echo "[_build] cleaning previous builds..."
+rm -rf build/ dist/ "$PACKAGE.build" "$PACKAGE.dist" "$ENTRY_POINT.build" "$ENTRY_POINT.dist" *.spec 2>/dev/null || true
+
+# --- Tcl/Tk libraries for the tkinter GUI ------------------------------------
+# Python 3.14 ships the Tcl/Tk script libraries as zip files inside the Python
+# install (tcl/libtcl9.0.4.zip, tcl/libtk9.0.4.zip) instead of the unzipped
+# tclX.Y/tkX.Y folders Nuitka's tk-inter plugin looks for, so the plugin fails
+# with "Could not find Tcl". Extract the zips into the build dir and point
+# Nuitka at the extracted folders explicitly.
+TCL_LIBS=$(python - <<'PYEOF'
+import os
+import sys
+import zipfile
+
+prefix = sys.prefix
+stage = os.path.join("build", "tcl_lib")
+tcl_root = os.path.join(prefix, "tcl")
+tcl_dir = ""
+tk_dir = ""
+
+if os.path.isdir(tcl_root):
+    tcl_zips = sorted(
+        p for p in os.listdir(tcl_root)
+        if p.startswith("libtcl") and p.endswith(".zip")
+    )
+    tk_zips = sorted(
+        p for p in os.listdir(tcl_root)
+        if p.startswith("libtk") and p.endswith(".zip")
+    )
+    if tcl_zips and tk_zips:
+        # New layout (Python 3.14+): extract the zipped script libraries.
+        os.makedirs(os.path.join(stage, "tcl"), exist_ok=True)
+        os.makedirs(os.path.join(stage, "tk"), exist_ok=True)
+        with zipfile.ZipFile(os.path.join(tcl_root, tcl_zips[0])) as z:
+            z.extractall(os.path.join(stage, "tcl"))
+        with zipfile.ZipFile(os.path.join(tcl_root, tk_zips[0])) as z:
+            z.extractall(os.path.join(stage, "tk"))
+        # Nuitka 4.1.x's tk-inter plugin also bundles a 'tcl8' sibling of the
+        # Tcl library dir on Windows; provide an empty one so it stays happy.
+        os.makedirs(os.path.join(stage, "tcl", "tcl8"), exist_ok=True)
+        for root, _dirs, files in os.walk(os.path.join(stage, "tcl")):
+            if "init.tcl" in files:
+                tcl_dir = root
+                break
+        for root, _dirs, files in os.walk(os.path.join(stage, "tk")):
+            if "dialog.tcl" in files:
+                tk_dir = root
+                break
+    else:
+        # Old layout: unzipped tclX.Y / tkX.Y folders.
+        for name in os.listdir(tcl_root):
+            path = os.path.join(tcl_root, name)
+            if not os.path.isdir(path):
+                continue
+            if not tcl_dir and os.path.isfile(os.path.join(path, "init.tcl")):
+                tcl_dir = path
+            if not tk_dir and os.path.isfile(os.path.join(path, "dialog.tcl")):
+                tk_dir = path
+
+print(tcl_dir)
+print(tk_dir)
+PYEOF
+)
+TCL_LIB_DIR=$(echo "$TCL_LIBS" | sed -n '1p')
+TK_LIB_DIR=$(echo "$TCL_LIBS" | sed -n '2p')
+
+TCL_OPTIONS=()
+if [ -n "$TCL_LIB_DIR" ] && [ -n "$TK_LIB_DIR" ]; then
+    echo "[_build] using Tcl/Tk libraries:"
+    echo "  Tcl: $TCL_LIB_DIR"
+    echo "  Tk:  $TK_LIB_DIR"
+    TCL_OPTIONS=(--tcl-library-dir="$TCL_LIB_DIR" --tk-library-dir="$TK_LIB_DIR")
+else
+    echo "[_build] note: no Tcl/Tk libraries found next to Python, letting Nuitka auto-detect."
+fi
+
+# --- build with Nuitka (single-file mode) ------------------------------------
+# IMPORTANT: unset CC/CXX so Nuitka's --zig logic takes over. If CC is set in
+# the environment (e.g. CC=GCC from a shell profile), Nuitka skips its zig
+# detection and falls back to gcc -> MinGW64, which FATALs on Python 3.13+.
+echo "[_build] compiling ollama-usage with nuitka (onefile)..."
+unset CC CXX
+python -m nuitka \
+    --onefile \
+    --zig \
+    --enable-plugin=tk-inter \
+    "${TCL_OPTIONS[@]}" \
+    --windows-icon-from-ico="${ICON}" \
+    --include-data-files="${ICON}=${ICON}" \
+    --product-name="ollama-usage" \
+    --product-version="${WIN_VERSION}" \
+    --file-version="${WIN_VERSION}" \
+    --file-description="Ollama Cloud quota usage checker" \
+    --output-dir="${OUTPUT_DIR}" \
+    --output-filename="${OUTPUT_NAME}" \
+    --include-package=cryptography \
+    --include-package="${PACKAGE}" \
+    --assume-yes-for-downloads \
+    "${ENTRY_POINT}" || { echo "[_build] build FAILED" >&2; exit 1; }
+
+FINAL="${OUTPUT_DIR}/${OUTPUT_NAME}"
+if [ -f "${FINAL}" ]; then
+    SIZE=$(ls -lh "${FINAL}" | awk '{print $5}')
+    echo ""
+    echo "[_build] DONE: ${FINAL} (${SIZE})"
+    echo "[_build] self-contained - the end user needs no Python/pip"
+    echo "[_build] testing binary..."
+    "${FINAL}" --version
+    # copy the *.exe to the Python Scripts dir, overwriting if present
+    echo "[_build] copying ${FINAL} to /c/Users/fmann/scoop/apps/python/current/Scripts/"
+    cp "${FINAL}" /c/Users/fmann/scoop/apps/python/current/Scripts/ 2>/dev/null || true
+else
+    echo "[_build] ERROR: build failed - no output found at ${FINAL}" >&2
+    exit 1
+fi
+
+# --- automated GitHub release (via gh CLI) ------------------------------------
+if [ "$DO_RELEASE" -eq 1 ]; then
+    TAG="v${VERSION}"
+    echo ""
+    echo "[_build] automated release: tagging $TAG and publishing release..."
+    if command -v git >/dev/null 2>&1; then
+        git tag -a "$TAG" -m "Release $TAG" 2>/dev/null || git tag "$TAG"
+        git push origin "$TAG" 2>/dev/null || echo "[_build] WARNING: git push origin $TAG skipped/failed"
+    fi
+    if command -v gh >/dev/null 2>&1; then
+        echo "[_build] creating GitHub release via gh CLI: $TAG with $FINAL"
+        gh release create "$TAG" "$FINAL" \
+            --title "$TAG" \
+            --notes "Automated standalone binary release for ollama-usage $VERSION" || {
+            echo "[_build] WARNING: gh release create failed" >&2
+        }
+    else
+        echo "[_build] gh CLI not found - install GitHub CLI (gh) to auto-upload release binaries."
+        echo "  Manual command: gh release create $TAG $FINAL --title '$TAG'"
+    fi
+fi
+echo ""
