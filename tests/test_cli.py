@@ -457,11 +457,11 @@ class TestAutorefreshSleepMini:
         assert "(2)" in out
         assert "(1)" in out
 
-    def test_countdown_is_cyan_when_colored(self, capsys) -> None:
+    def test_countdown_is_decorator_when_colored(self, capsys) -> None:
         from ollama_usage.cli import _ANSI
         with patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
              patch("ollama_usage.cli.time.sleep"), \
              patch.dict("os.environ", {}, clear=True):
             _autorefresh_sleep_mini(2, "prefix")
         out = capsys.readouterr().out
-        assert _ANSI["cyan"] + "(2)" + _ANSI["reset"] in out
+        assert _ANSI["grey"] + "(2)" + _ANSI["reset"] in out
