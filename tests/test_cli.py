@@ -397,7 +397,7 @@ class TestMiniLine:
     def test_plain_output(self) -> None:
         data = make_data(42.0, 77.0, web_search_requests=2)
         line = _mini_line(data, use_color=False)
-        assert line.startswith("olu (free) - s:  42.0% (")
+        assert line.startswith("olu (free) s:  42.0% (")
         assert " | w:  77.0% (" in line
         assert " wr: 2" in line
 
@@ -412,6 +412,10 @@ class TestMiniLine:
         line = _mini_line(data, use_color=True)
         assert _ANSI["orange"] + "free" + _ANSI["reset"] in line
         assert _ANSI["cyan"] + "2" + _ANSI["reset"] in line
+        # The plan parentheses and the | separator use the decorator color.
+        assert _ANSI["grey"] + "(" + _ANSI["reset"] in line
+        assert _ANSI["grey"] + ")" + _ANSI["reset"] in line
+        assert _ANSI["grey"] + "|" + _ANSI["reset"] in line
 
 
 class TestDisplayMinidisplay:
@@ -420,7 +424,7 @@ class TestDisplayMinidisplay:
         display(make_data(42.0, 77.0, web_search_requests=2), as_json=False, quiet=False, minidisplay=True)
         out = capsys.readouterr().out
         assert out.count("\n") == 1
-        assert out.startswith("olu (free) - s:")
+        assert out.startswith("olu (free) s:")
 
     def test_json_takes_precedence_over_minidisplay(self, capsys) -> None:
         import json

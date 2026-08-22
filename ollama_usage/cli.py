@@ -182,9 +182,10 @@ def _mini_line(data: dict, use_color: bool) -> str:
     if use_color:
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
     sep = _ANSI[decorator_color] + "|" + _ANSI["reset"] if use_color else "|"
-    dash = _ANSI[decorator_color] + "-" + _ANSI["reset"] if use_color else "-"
+    paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
+    paren_end = _ANSI[decorator_color] + ")" + _ANSI["reset"] if use_color else ")"
     return (
-        f"olu ({plan}) {dash} s: {session_pct} ({session_left})"
+        f"olu {paren}{plan}{paren_end} s: {session_pct} ({session_left})"
         f" {sep} w: {weekly_pct} ({weekly_left})"
         f" wr: {wr}"
     )

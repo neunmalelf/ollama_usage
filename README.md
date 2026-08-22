@@ -112,7 +112,7 @@ Model calls this week:
 
 ### Minidisplay output
 ```
-olu (pro) - s:   2.6% (02:46) | w:   1.9% (1d 06:46) wr: 2
+olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) wr: 2
 ```
 
 `--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search request count. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a cyan `(mm:ss)` countdown is appended and refreshed in place at the end of the line.
