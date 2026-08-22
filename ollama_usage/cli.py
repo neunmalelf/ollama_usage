@@ -47,8 +47,8 @@ _PLAN_COLOR = "orange"
 
 #: Named colors for the time components (shared across CLI, GUI and widget).
 _DAYS_COLOR    = "yellow"
-_HOURS_COLOR   = "yellow"
-_MINUTES_COLOR = "cyan"
+_HOURS_COLOR   = "cyan"
+_MINUTES_COLOR = "magenta"
 _SECONDS_COLOR = "magenta"
 _VALUE_COLOR   = "cyan"
 _LABEL_COLOR   = "white"

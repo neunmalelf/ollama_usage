@@ -46,10 +46,10 @@ class TestFormatTimeLeft:
             mock_dt.now.return_value = fixed
             mock_dt.timezone = timezone
             result = _format_time_left("2026-04-04T17:00:00Z", use_color=True)
-        # Days and hours numbers in yellow, minutes in cyan; labels white.
+        # Days in yellow, hours in cyan, minutes in magenta; labels white.
         assert _ANSI["yellow"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "d" + _ANSI["reset"] in result
-        assert _ANSI["yellow"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "h" + _ANSI["reset"] in result
-        assert _ANSI["cyan"] + "42" + _ANSI["reset"] + _ANSI["white"] + "m" + _ANSI["reset"] in result
+        assert _ANSI["cyan"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "h" + _ANSI["reset"] in result
+        assert _ANSI["magenta"] + "42" + _ANSI["reset"] + _ANSI["white"] + "m" + _ANSI["reset"] in result
 
     def test_resets_now_when_past(self) -> None:
         assert _format_time_left("2000-01-01T00:00:00Z") == " (resets now)"
@@ -360,8 +360,8 @@ class TestFormatRemainingCompact:
             mock_dt.timezone = timezone
             result = _format_remaining_compact("2026-04-04T17:00:00Z", use_color=True)
         assert _ANSI["yellow"] + "2" + _ANSI["reset"] + _ANSI["white"] + "d" + _ANSI["reset"] in result
-        assert _ANSI["yellow"] + "02" + _ANSI["reset"] in result
-        assert _ANSI["cyan"] + "42" + _ANSI["reset"] in result
+        assert _ANSI["cyan"] + "02" + _ANSI["reset"] in result
+        assert _ANSI["magenta"] + "42" + _ANSI["reset"] in result
 
     def test_hours_minutes_no_days(self) -> None:
         from datetime import datetime, timezone
