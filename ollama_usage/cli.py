@@ -456,7 +456,7 @@ def main():
         "  olu (pro)\n"
         "  s:  42.0%% (02:46)\n"
         "  w:  77.0%% (1d 06:46)\n"
-        "  wr: 2\n"
+        "  wr: 2 [auto-refresh-timer]\n"
         "  clears the terminal before showing the output (TTY only)",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
