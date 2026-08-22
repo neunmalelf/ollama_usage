@@ -222,13 +222,13 @@ class TestBuildSegments:
         assert labels.get("h") == "white"
         assert labels.get("m") == "white"
 
-    def test_countdown_days_orange(self) -> None:
+    def test_countdown_days_yellow(self) -> None:
         # Use a far-future weekly date so the countdown has a days component.
         segs = build_segments(make_data(session_pct=2.6, weekly_pct=1.9))
         weekly_line = next(l for l in segs if "Weekly" in _seg_text(l))
-        # The days number is orange.
+        # The days number is yellow (days come before hours in the segments).
         days_num = next(
-            (text for text, color in weekly_line if color == "orange"), None
+            (text for text, color in weekly_line if color == "yellow"), None
         )
         assert days_num is not None
         assert days_num.strip().isdigit()

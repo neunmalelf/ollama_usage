@@ -46,10 +46,10 @@ class TestFormatTimeLeft:
             mock_dt.now.return_value = fixed
             mock_dt.timezone = timezone
             result = _format_time_left("2026-04-04T17:00:00Z", use_color=True)
-        # Days number in yellow, hours in cyan, minutes in magenta; labels white.
+        # Days and hours numbers in yellow, minutes in cyan; labels white.
         assert _ANSI["yellow"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "d" + _ANSI["reset"] in result
-        assert _ANSI["cyan"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "h" + _ANSI["reset"] in result
-        assert _ANSI["magenta"] + "42" + _ANSI["reset"] + _ANSI["white"] + "m" + _ANSI["reset"] in result
+        assert _ANSI["yellow"] + " 2" + _ANSI["reset"] + _ANSI["white"] + "h" + _ANSI["reset"] in result
+        assert _ANSI["cyan"] + "42" + _ANSI["reset"] + _ANSI["white"] + "m" + _ANSI["reset"] in result
 
     def test_resets_now_when_past(self) -> None:
         assert _format_time_left("2000-01-01T00:00:00Z") == " (resets now)"
@@ -350,6 +350,19 @@ class TestFormatRemainingCompact:
             result = _format_remaining_compact("2026-04-04T17:00:00Z")
         assert result == "2d 02:42"
 
+    def test_colored_days_hours_minutes(self) -> None:
+        from datetime import datetime, timezone
+        from ollama_usage.cli import _ANSI
+        fixed = datetime(2026, 4, 2, 14, 18, 0, tzinfo=timezone.utc)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.fromisoformat.side_effect = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+            mock_dt.now.return_value = fixed
+            mock_dt.timezone = timezone
+            result = _format_remaining_compact("2026-04-04T17:00:00Z", use_color=True)
+        assert _ANSI["yellow"] + "2" + _ANSI["reset"] + _ANSI["white"] + "d" + _ANSI["reset"] in result
+        assert _ANSI["yellow"] + "02" + _ANSI["reset"] in result
+        assert _ANSI["cyan"] + "42" + _ANSI["reset"] in result
+
     def test_hours_minutes_no_days(self) -> None:
         from datetime import datetime, timezone
         fixed = datetime(2026, 4, 2, 14, 18, 0, tzinfo=timezone.utc)
@@ -384,14 +397,14 @@ class TestMiniLine:
     def test_plain_output(self) -> None:
         data = make_data(42.0, 77.0, web_search_requests=2)
         line = _mini_line(data, use_color=False)
-        assert line.startswith("olu - s:  42.0% (")
+        assert line.startswith("olu (free) - s:  42.0% (")
         assert " | w:  77.0% (" in line
-        assert " wr: 2 free" in line
+        assert " wr: 2" in line
 
     def test_web_search_absent_shows_zero(self) -> None:
         data = make_data(42.0, 77.0)
         line = _mini_line(data, use_color=False)
-        assert " wr: 0 free" in line
+        assert " wr: 0" in line
 
     def test_color_wraps_plan_and_web_search(self) -> None:
         from ollama_usage.cli import _ANSI
@@ -407,7 +420,7 @@ class TestDisplayMinidisplay:
         display(make_data(42.0, 77.0, web_search_requests=2), as_json=False, quiet=False, minidisplay=True)
         out = capsys.readouterr().out
         assert out.count("\n") == 1
-        assert out.startswith("olu - s:")
+        assert out.startswith("olu (free) - s:")
 
     def test_json_takes_precedence_over_minidisplay(self, capsys) -> None:
         import json
