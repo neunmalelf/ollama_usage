@@ -201,9 +201,9 @@ def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -
         use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
         plan = data['plan']
         if use_color:
-            plan = f" {_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
+            plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
         print("")
-        print(f"Plan     :  {plan}")
+        print(f"Plan     : {plan}")
         print(
             f"Session  : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'], use_color)}"
         )
