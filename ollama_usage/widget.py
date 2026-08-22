@@ -265,12 +265,12 @@ class OllamaWidget:
 
     # ---------------------------------------------------------------- menu / toggle
 
-    def _show_menu(self, event: tk.Event) -> None:
-        try:
-            if self._root.winfo_exists():
-                self._menu.tk_popup(event.x_root, event.y_root)
-        except tk.TclError:
-            pass
+        finally:
+            # Release the grab so the menu closes once an item is selected.
+            try:
+                self._menu.grab_release()
+            except tk.TclError:
+                pass
 
     def _toggle_size(self) -> None:
         self._size = "compact" if self._size == "full" else "full"
