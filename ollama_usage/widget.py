@@ -89,7 +89,7 @@ POSITIONS = {
 }
 
 # Widget dimensions
-_W_COMPACT = (240, 72)
+_W_COMPACT = (380, 40)
 _W_FULL    = (240, 172)
 _BAR_W     = 200
 _BAR_H     = 8
@@ -152,6 +152,71 @@ def _countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]:
         segs.append((" ", theme["sub"]))
     if s or not (d or h or m):
         segs.append((f"{s:02d}s", theme[_SECONDS_COLOR]))
+    return segs
+
+
+def _mini_countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]:
+    """Return the countdown as ``[dd] hh:mm`` colored segments (minidisplay).
+
+    Matches the CLI --minidisplay remaining-time format: days (when present)
+    in the days color, hours in the hours color, minutes in the minutes color,
+    and the ``:`` separator in the label color.
+    """
+    if seconds <= 0:
+        return [("00:00", theme["sub"])]
+    d, rem = divmod(seconds, 86400)
+    h, rem = divmod(rem, 3600)
+    m, _   = divmod(rem, 60)
+    segs: list[tuple[str, str]] = []
+    if d:
+        segs.append((f"{d}d", theme[_DAYS_COLOR]))
+        segs.append((" ", theme["sub"]))
+    segs.append((f"{h:02d}", theme[_HOURS_COLOR]))
+    segs.append((":", theme["sub"]))
+    segs.append((f"{m:02d}", theme[_MINUTES_COLOR]))
+    return segs
+
+
+def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
+    """Return the minidisplay line as colored segments (no bars).
+
+    Layout matches the CLI --minidisplay output:
+    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) wr: <count>``
+    """
+    plan = data.get("plan", "—")
+    session = data.get("session") or {}
+    weekly = data.get("weekly") or {}
+    web_search = data.get("web_search_requests")
+    wr = "0" if web_search is None else str(web_search)
+
+    segs: list[tuple[str, str]] = []
+    segs.append(("olu ", theme["sub"]))
+    segs.append(("(", theme["sub"]))
+    segs.append((plan, theme[_PLAN_COLOR]))
+    segs.append((")", theme["sub"]))
+    segs.append((" s: ", theme["sub"]))
+    segs.append((
+        f"{session.get('used_pct', 0.0):.1f}%",
+        _pct_color(session.get("used_pct", 0.0), theme),
+    ))
+    segs.append((" (", theme["sub"]))
+    segs.extend(_mini_countdown_segments(
+        _seconds_until(session.get("resets_at", "")), theme
+    ))
+    segs.append((")", theme["sub"]))
+    segs.append((" |", theme["sub"]))
+    segs.append((" w: ", theme["sub"]))
+    segs.append((
+        f"{weekly.get('used_pct', 0.0):.1f}%",
+        _pct_color(weekly.get("used_pct", 0.0), theme),
+    ))
+    segs.append((" (", theme["sub"]))
+    segs.extend(_mini_countdown_segments(
+        _seconds_until(weekly.get("resets_at", "")), theme
+    ))
+    segs.append((")", theme["sub"]))
+    segs.append((" wr: ", theme["sub"]))
+    segs.append((wr, theme[_VALUE_COLOR]))
     return segs
 
 
@@ -427,14 +492,6 @@ class OllamaWidget:
         w, h   = _W_COMPACT
         p      = _PAD
 
-        # Status dot
-        dot = t["green"] if self._data and not self._error else t["red"]
-        c.create_text(w - p, p, text="●", anchor="ne",
-                      fill=dot, font=(_FONT, 8))
-        # App label
-        c.create_text(p, p, text="ollama-usage", anchor="nw",
-                      fill=t["sub"], font=(_FONT, 8))
-
         if self._error or not self._data:
             msg = self._error or "Loading…"
             c.create_text(w // 2, h // 2, text=msg, anchor="center",
@@ -442,23 +499,13 @@ class OllamaWidget:
                           font=(_FONT, 9))
             return
 
-        y = p + 20
-        rows = [("Session", self._data["session"]["used_pct"]),
-                ("Weekly",  self._data["weekly"]["used_pct"])]
-        for label, pct in rows:
-            color = _pct_color(pct, t)
-            c.create_text(p,     y, text=f"{label}:", anchor="nw",
-                          fill=t["sub"], font=(_FONT, 9))
-            c.create_text(w - p, y, text=f"{pct:.1f}%", anchor="ne",
-                          fill=color, font=(_FONT, 9, "bold"))
-            y += 16
+        # Status dot
+        dot = t["green"] if self._data and not self._error else t["red"]
+        c.create_text(w - p, p, text="●", anchor="ne",
+                      fill=dot, font=(_FONT, 8))
 
-        ws = self._data.get("web_search_requests")
-        if ws is not None:
-            c.create_text(p,     y, text="Web search:", anchor="nw",
-                          fill=t["sub"], font=(_FONT, 9))
-            c.create_text(w - p, y, text=f"{ws} req", anchor="ne",
-                          fill=t["sub"], font=(_FONT, 9))
+        # Minidisplay line (same layout as --minidisplay, no bars)
+        self._draw_segments(c, p, p, _mini_segments(self._data, t), (_FONT, 8))
 
     def _draw_full(self) -> None:
         c, t   = self._canvas, self._theme
