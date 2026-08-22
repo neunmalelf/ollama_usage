@@ -51,6 +51,12 @@ ollama-usage --autorefresh
 ollama-usage --autorefresh 60
 ollama-usage --autorefresh 1200
 
+# Single-line compact output
+ollama-usage --minidisplay
+
+# Compact output with autorefresh (appends a cyan countdown)
+ollama-usage --minidisplay --autorefresh 60
+
 # Alert mode — exit code 1 if usage exceeds 80%
 ollama-usage --alert 80
 
@@ -103,6 +109,13 @@ Model calls this week:
               382 deepseek-v4-flash:0731
                60 deepseek-v4-flash
 ```
+
+### Minidisplay output
+```
+olu - s:   2.6% (02:46) | w:   1.9% (1d 06:46) wr: 2 pro
+```
+
+`--minidisplay` prints one compact line: session percentage and remaining time, weekly percentage and remaining time, web search request count, and the plan name. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a cyan `(mm:ss)` countdown is appended and refreshed in place at the end of the line.
 
 The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `Models used this week:` section lists per-model request counts. Both only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 

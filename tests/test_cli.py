@@ -12,6 +12,10 @@ from ollama_usage.cli import (
     _format_time_left,
     _autorefresh_sleep,
     _next_refresh_timestamp,
+    _format_remaining_compact,
+    _format_countdown,
+    _mini_line,
+    _autorefresh_sleep_mini,
 )
 
 
@@ -328,3 +332,115 @@ class TestAutorefreshFooter:
         # each \r rewrite, but always with the same value, never advancing).
         assert "2026-08-08 13-46-08" in out
         assert "13-46-09" not in out
+
+
+# ---------------------------------------------------------------------------
+# Minidisplay
+# ---------------------------------------------------------------------------
+
+class TestFormatRemainingCompact:
+
+    def test_days_hours_minutes(self) -> None:
+        from datetime import datetime, timezone
+        fixed = datetime(2026, 4, 2, 14, 18, 0, tzinfo=timezone.utc)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.fromisoformat.side_effect = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+            mock_dt.now.return_value = fixed
+            mock_dt.timezone = timezone
+            result = _format_remaining_compact("2026-04-04T17:00:00Z")
+        assert result == "2d 02:42"
+
+    def test_hours_minutes_no_days(self) -> None:
+        from datetime import datetime, timezone
+        fixed = datetime(2026, 4, 2, 14, 18, 0, tzinfo=timezone.utc)
+        with patch("ollama_usage.cli.datetime") as mock_dt:
+            mock_dt.fromisoformat.side_effect = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+            mock_dt.now.return_value = fixed
+            mock_dt.timezone = timezone
+            result = _format_remaining_compact("2026-04-02T16:00:00Z")
+        assert result == "01:42"
+
+    def test_past_returns_zero(self) -> None:
+        assert _format_remaining_compact("2000-01-01T00:00:00Z") == "00:00"
+
+    def test_invalid_returns_empty(self) -> None:
+        assert _format_remaining_compact("not-a-date") == ""
+
+
+class TestFormatCountdown:
+
+    def test_under_a_minute(self) -> None:
+        assert _format_countdown(42) == "(42)"
+
+    def test_over_a_minute(self) -> None:
+        assert _format_countdown(125) == "(2:05)"
+
+    def test_exactly_a_minute(self) -> None:
+        assert _format_countdown(60) == "(1:00)"
+
+
+class TestMiniLine:
+
+    def test_plain_output(self) -> None:
+        data = make_data(42.0, 77.0, web_search_requests=2)
+        line = _mini_line(data, use_color=False)
+        assert line.startswith("olu - s:  42.0% (")
+        assert " | w:  77.0% (" in line
+        assert " wr: 2 free" in line
+
+    def test_web_search_absent_shows_zero(self) -> None:
+        data = make_data(42.0, 77.0)
+        line = _mini_line(data, use_color=False)
+        assert " wr: 0 free" in line
+
+    def test_color_wraps_plan_and_web_search(self) -> None:
+        from ollama_usage.cli import _ANSI
+        data = make_data(42.0, 77.0, web_search_requests=2)
+        line = _mini_line(data, use_color=True)
+        assert _ANSI["orange"] + "free" + _ANSI["reset"] in line
+        assert _ANSI["cyan"] + "2" + _ANSI["reset"] in line
+
+
+class TestDisplayMinidisplay:
+
+    def test_minidisplay_prints_single_line(self, capsys) -> None:
+        display(make_data(42.0, 77.0, web_search_requests=2), as_json=False, quiet=False, minidisplay=True)
+        out = capsys.readouterr().out
+        assert out.count("\n") == 1
+        assert out.startswith("olu - s:")
+
+    def test_json_takes_precedence_over_minidisplay(self, capsys) -> None:
+        import json
+        display(make_data(42.0, 77.0), as_json=True, quiet=False, minidisplay=True)
+        out = capsys.readouterr().out
+        parsed = json.loads(out)
+        assert parsed["session"]["used_pct"] == 42.0
+
+
+class TestAutorefreshSleepMini:
+
+    def test_non_tty_sleeps_once(self) -> None:
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=False), \
+             patch("ollama_usage.cli.time.sleep") as mock_sleep:
+            _autorefresh_sleep_mini(120, "prefix")
+        mock_sleep.assert_called_once_with(120)
+
+    def test_writes_countdown_with_prefix(self, capsys) -> None:
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
+             patch("ollama_usage.cli.time.sleep"), \
+             patch.dict("os.environ", {"NO_COLOR": "1"}):
+            _autorefresh_sleep_mini(3, "olu - s: x")
+        out = capsys.readouterr().out
+        assert "olu - s: x" in out
+        assert "(3)" in out
+        assert "(2)" in out
+        assert "(1)" in out
+
+    def test_countdown_is_cyan_when_colored(self, capsys) -> None:
+        from ollama_usage.cli import _ANSI
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
+             patch("ollama_usage.cli.time.sleep"), \
+             patch.dict("os.environ", {}, clear=True):
+            _autorefresh_sleep_mini(2, "prefix")
+        out = capsys.readouterr().out
+        assert _ANSI["cyan"] + "(2)" + _ANSI["reset"] in out
