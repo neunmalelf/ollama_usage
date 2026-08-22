@@ -92,3 +92,40 @@ class TestRestorePosition:
         inst._root.winfo_y.return_value = 88
         inst._save_position()
         assert w._load_state() == {"x": 77, "y": 88, "size": "compact"}
+
+# ---------------------------------------------------------------------------
+# _mini_segments / _mini_countdown_segments — compact minidisplay layout
+# ---------------------------------------------------------------------------
+
+def _make_data(**overrides) -> dict:
+    data = {
+        "plan": "pro",
+        "session": {"used_pct": 2.6, "resets_at": "2026-04-04T17:00:00Z"},
+        "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
+        "web_search_requests": 2,
+    }
+    data.update(overrides)
+    return data
+
+
+class TestMiniSegments:
+
+    def test_layout_matches_minidisplay(self) -> None:
+        segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert text == "olu (pro) s: 2.6% (00:00) | w: 1.9% (00:00) wr: 2"
+
+    def test_plan_is_orange(self) -> None:
+        segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
+        plan = next(t for t, c in segs if c == w.THEMES["minimal"][w._PLAN_COLOR])
+        assert plan == "pro"
+
+    def test_web_search_absent_shows_zero(self) -> None:
+        segs = w._mini_segments(_make_data(web_search_requests=None), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert text.endswith("wr: 0")
+
+    def test_countdown_compact_format(self) -> None:
+        segs = w._mini_countdown_segments(90061, w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert text == "1d 01:01"
