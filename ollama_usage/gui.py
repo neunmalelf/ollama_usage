@@ -13,19 +13,19 @@ import pathlib
 import sys
 import threading
 import tkinter as tk
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Callable
 
 from ollama_usage import __version__ as _pkg_version
 from ollama_usage.cli import _next_refresh_timestamp
 from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError
+from ollama_usage.scraper import get_usage
 
 
 def _gui_refresh_timestamp(seconds_from_now: int) -> str:
     """Return ``YYYY-MM-DD hh:mm:ss`` (colons) for the next refresh time."""
     dash = _next_refresh_timestamp(seconds_from_now)
     return f"{dash[:10]} {dash[11:13]}:{dash[14:16]}:{dash[17:19]}"
-from ollama_usage.scraper import get_usage
 
 logger = logging.getLogger(__name__)
 
