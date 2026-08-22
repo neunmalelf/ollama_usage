@@ -426,7 +426,11 @@ def main():
         metavar="PERCENTAGE",
         help="Threshold for desktop notifications in PERCENTAGE (%%) (default: 80, requires --notify)",
     )
-    parser.add_argument("--widget", action="store_true", help="Launch desktop widget")
+    parser.add_argument(
+        "--widget",
+        action="store_true",
+        help="Launch desktop widget (A indicator: green=fresh, red=error)",
+    )
     parser.add_argument(
         "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
     )
