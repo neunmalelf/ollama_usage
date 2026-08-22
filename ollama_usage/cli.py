@@ -38,6 +38,7 @@ _ANSI = {
     "cyan":    "\033[36m",
     "magenta": "\033[35m",
     "white":   "\033[37m",
+    "grey":    "\033[90m",
     "orange":  "\033[38;5;208m",
 }
 
@@ -51,6 +52,9 @@ _MINUTES_COLOR = "cyan"
 _SECONDS_COLOR = "magenta"
 _VALUE_COLOR   = "cyan"
 _LABEL_COLOR   = "white"
+
+#: Color used for decorative separators and secondary footer text.
+decorator_color = "grey"
 
 _HAS_COLOR = True
 
@@ -177,9 +181,11 @@ def _mini_line(data: dict, use_color: bool) -> str:
     wr = "0" if web_search is None else str(web_search)
     if use_color:
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
+    sep = _ANSI[decorator_color] + "|" + _ANSI["reset"] if use_color else "|"
+    dash = _ANSI[decorator_color] + "-" + _ANSI["reset"] if use_color else "-"
     return (
-        f"olu ({plan}) - s: {session_pct} ({session_left})"
-        f" | w: {weekly_pct} ({weekly_left})"
+        f"olu ({plan}) {dash} s: {session_pct} ({session_left})"
+        f" {sep} w: {weekly_pct} ({weekly_left})"
         f" wr: {wr}"
     )
 
@@ -319,8 +325,10 @@ def _autorefresh_sleep(interval: int) -> None:
     for remaining in range(interval, 0, -1):
         if use_color:
             line = (
-                f"next refresh in {_ANSI['cyan']}{remaining}{_ANSI['reset']}"
-                f" seconds at {_ANSI['cyan']}{next_str}{_ANSI['reset']}"
+                f"{_ANSI[decorator_color]}next refresh in {_ANSI['reset']}"
+                f"{_ANSI['cyan']}{remaining}{_ANSI['reset']}"
+                f"{_ANSI[decorator_color]} seconds at {_ANSI['reset']}"
+                f"{_ANSI['cyan']}{next_str}{_ANSI['reset']}"
             )
         else:
             line = f"next refresh in {remaining} seconds at {next_str}"
@@ -384,7 +392,7 @@ def main():
         default=None,
         metavar="SECONDS",
         help="Refresh continuously every SECONDS seconds (default: 120).\n"
-        "Shows a timestamp footer with the next refresh time.",
+        f"{_ANSI[decorator_color]}Shows a timestamp footer with the next refresh time.{_ANSI['reset']}",
     )
     parser.add_argument(
         "--alert",
