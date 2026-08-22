@@ -391,7 +391,8 @@ def main():
         "  olu = ollama usage, (pro) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
         "  wr = web search requests this session\n"
-        "  remaining time is [dd] hh:mm (days omitted when zero)",
+        "  remaining time is [dd] hh:mm (days omitted when zero)\n"
+        "  clears the terminal before showing the line (TTY only)",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")

@@ -115,7 +115,7 @@ Model calls this week:
 olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) wr: 2
 ```
 
-`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search request count. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a cyan `(mm:ss)` countdown is appended and refreshed in place at the end of the line.
+`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search request count. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line. When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
 
 The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `Models used this week:` section lists per-model request counts. Both only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 
