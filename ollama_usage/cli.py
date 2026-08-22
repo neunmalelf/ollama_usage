@@ -178,22 +178,21 @@ def _mini_line(data: dict, use_color: bool) -> str:
         plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
     session_pct = _color_pct(data["session"]["used_pct"], use_color)
     weekly_pct = _color_pct(data["weekly"]["used_pct"], use_color)
-    session_left = _format_remaining_compact(
-        data["session"]["resets_at"], use_color
-    )
-    weekly_left = _format_remaining_compact(
-        data["weekly"]["resets_at"], use_color
-    )
+    # Remaining time is shown in the decorator color (no per-component colors).
+    session_left = _format_remaining_compact(data["session"]["resets_at"], False)
+    weekly_left = _format_remaining_compact(data["weekly"]["resets_at"], False)
     web_search = data.get("web_search_requests")
     wr = "0" if web_search is None else str(web_search)
     if use_color:
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
+        session_left = f"{_ANSI[decorator_color]}{session_left}{_ANSI['reset']}"
+        weekly_left = f"{_ANSI[decorator_color]}{weekly_left}{_ANSI['reset']}"
     sep = _ANSI[decorator_color] + "|" + _ANSI["reset"] if use_color else "|"
     paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
     paren_end = _ANSI[decorator_color] + ")" + _ANSI["reset"] if use_color else ")"
     return (
-        f"olu {paren}{plan}{paren_end} s: {session_pct} ({session_left})"
-        f" {sep} w: {weekly_pct} ({weekly_left})"
+        f"olu {paren}{plan}{paren_end} s: {session_pct} {paren}{session_left}{paren_end}"
+        f" {sep} w: {weekly_pct} {paren}{weekly_left}{paren_end}"
         f" wr: {wr}"
     )
 
