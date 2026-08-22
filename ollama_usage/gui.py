@@ -141,6 +141,9 @@ def build_lines(data: dict | None, error: str | None = None) -> list[str]:
 # Colored display content (pure, testable — no tkinter dependency)
 # ---------------------------------------------------------------------------
 
+#: Color name used for the plan value (shared across CLI, GUI and widget).
+_PLAN_COLOR = "orange"
+
 # ANSI color names -> hex values (standard ANSI palette, matching the
 # terminal version's default rendering). Used for the dark mode.
 COLORS: dict[str, str] = {
@@ -232,7 +235,7 @@ def build_segments(
 
     lines: list[list[tuple[str, str | None]]] = []
     plan = data.get("plan", "—")
-    lines.append([("Plan     : ", None), (plan, "orange")])
+    lines.append([("Plan     : ", None), (plan, _PLAN_COLOR)])
 
     session = data.get("session") or {}
     weekly = data.get("weekly") or {}

@@ -36,6 +36,7 @@ THEMES: dict[str, dict[str, str]] = {
         "green":  "#a6e3a1",
         "yellow": "#f9e2af",
         "red":    "#f38ba8",
+        "orange": "#ff8700",
     },
     "light": {
         "bg":     "#eff1f5",
@@ -46,6 +47,7 @@ THEMES: dict[str, dict[str, str]] = {
         "green":  "#40a02b",
         "yellow": "#df8e1d",
         "red":    "#d20f39",
+        "orange": "#ff8700",
     },
     "minimal": {
         "bg":     "#0a0a0a",
@@ -56,8 +58,12 @@ THEMES: dict[str, dict[str, str]] = {
         "green":  "#00e676",
         "yellow": "#ffea00",
         "red":    "#ff1744",
+        "orange": "#ff8700",
     },
 }
+
+#: Color name used for the plan value (shared across CLI, GUI and widget).
+_PLAN_COLOR = "orange"
 
 POSITIONS = {
     "top-left":     lambda sw, sh, ww, wh: (10, 10),
@@ -379,8 +385,11 @@ class OllamaWidget:
 
         # Header
         plan = self._data["plan"].capitalize() if self._data else "—"
-        c.create_text(p, p, text=f"ollama · {plan}", anchor="nw",
-                      fill=t["sub"], font=(_FONT, 8))
+        prefix_id = c.create_text(p, p, text="ollama · ", anchor="nw",
+                                  fill=t["sub"], font=(_FONT, 8))
+        _, _, prefix_x2, _ = c.bbox(prefix_id)
+        c.create_text(prefix_x2, p, text=plan, anchor="nw",
+                      fill=t[_PLAN_COLOR], font=(_FONT, 8))
         dot = t["green"] if self._data and not self._error else t["red"]
         c.create_text(w - p, p, text="●", anchor="ne",
                       fill=dot, font=(_FONT, 8))

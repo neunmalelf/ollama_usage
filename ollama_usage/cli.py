@@ -38,9 +38,11 @@ _ANSI = {
     "cyan":    "\033[36m",
     "magenta": "\033[35m",
     "white":   "\033[37m",
-    "grey":    "\033[90m",
     "orange":  "\033[38;5;208m",
 }
+
+#: Color name used for the plan value (shared across CLI, GUI and widget).
+_PLAN_COLOR = "orange"
 
 _HAS_COLOR = True
 
@@ -145,7 +147,7 @@ def _mini_line(data: dict, use_color: bool) -> str:
     """Build the single-line minidisplay string (no trailing newline)."""
     plan = data["plan"]
     if use_color:
-        plan = f"{_ANSI['orange']}{plan}{_ANSI['reset']}"
+        plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
     session_pct = _color_pct(data["session"]["used_pct"], use_color)
     weekly_pct = _color_pct(data["weekly"]["used_pct"], use_color)
     session_left = _format_remaining_compact(data["session"]["resets_at"])
@@ -172,7 +174,7 @@ def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -
         use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
         plan = data['plan']
         if use_color:
-            plan = f" {_ANSI['orange']}{plan}{_ANSI['reset']}"
+            plan = f" {_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
         print("")
         print(f"Plan     :  {plan}")
         print(
