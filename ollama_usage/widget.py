@@ -92,7 +92,7 @@ POSITIONS = {
 }
 
 # Widget dimensions
-_W_COMPACT = (380, 40)
+_W_COMPACT = (320, 30)
 _W_FULL    = (240, 172)
 _BAR_W     = 200
 _BAR_H     = 8
@@ -486,7 +486,7 @@ class OllamaWidget:
     def _draw_compact(self) -> None:
         c, t   = self._canvas, self._theme
         w, h   = _W_COMPACT
-        p      = _PAD
+        p      = 6  # tighter padding for the compact view
 
         if self._error or not self._data:
             msg = self._error or "Loading…"
