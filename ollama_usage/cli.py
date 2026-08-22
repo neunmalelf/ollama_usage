@@ -44,6 +44,14 @@ _ANSI = {
 #: Color name used for the plan value (shared across CLI, GUI and widget).
 _PLAN_COLOR = "orange"
 
+#: Named colors for the time components (shared across CLI, GUI and widget).
+_DAYS_COLOR    = "yellow"
+_HOURS_COLOR   = "yellow"
+_MINUTES_COLOR = "cyan"
+_SECONDS_COLOR = "magenta"
+_VALUE_COLOR   = "cyan"
+_LABEL_COLOR   = "white"
+
 _HAS_COLOR = True
 
 
@@ -117,8 +125,12 @@ def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
     return color + padded_text + _ANSI["reset"]
 
 
-def _format_remaining_compact(iso: str) -> str:
-    """Return remaining time as ``[dd] hh:mm`` (days omitted when zero)."""
+def _format_remaining_compact(iso: str, use_color: bool = False) -> str:
+    """Return remaining time as ``[dd] hh:mm`` (days omitted when zero).
+
+    When ``use_color`` is true the days, hours and minutes numbers are colored
+    with the named time colors and the ``:`` separator with the label color.
+    """
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
         diff = dt - datetime.now(timezone.utc)
@@ -128,9 +140,14 @@ def _format_remaining_compact(iso: str) -> str:
         days, rem = divmod(total_seconds, 86400)
         hours, rem = divmod(rem, 3600)
         minutes, _ = divmod(rem, 60)
+        hours_str = _color_num(f"{hours:02d}", _HOURS_COLOR, use_color)
+        minutes_str = _color_num(f"{minutes:02d}", _MINUTES_COLOR, use_color)
+        sep = _ANSI[_LABEL_COLOR] + ":" + _ANSI["reset"] if use_color else ":"
+        time_str = f"{hours_str}{sep}{minutes_str}"
         if days:
-            return f"{days}d {hours:02d}:{minutes:02d}"
-        return f"{hours:02d}:{minutes:02d}"
+            days_str = _color_part(f"{days}d", _DAYS_COLOR, use_color)
+            return f"{days_str} {time_str}"
+        return time_str
     except Exception:
         return ""
 
@@ -150,16 +167,20 @@ def _mini_line(data: dict, use_color: bool) -> str:
         plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
     session_pct = _color_pct(data["session"]["used_pct"], use_color)
     weekly_pct = _color_pct(data["weekly"]["used_pct"], use_color)
-    session_left = _format_remaining_compact(data["session"]["resets_at"])
-    weekly_left = _format_remaining_compact(data["weekly"]["resets_at"])
+    session_left = _format_remaining_compact(
+        data["session"]["resets_at"], use_color
+    )
+    weekly_left = _format_remaining_compact(
+        data["weekly"]["resets_at"], use_color
+    )
     web_search = data.get("web_search_requests")
     wr = "0" if web_search is None else str(web_search)
     if use_color:
-        wr = f"{_ANSI['cyan']}{wr}{_ANSI['reset']}"
+        wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
     return (
-        f"olu - s: {session_pct} ({session_left})"
+        f"olu ({plan}) - s: {session_pct} ({session_left})"
         f" | w: {weekly_pct} ({weekly_left})"
-        f" wr: {wr} {plan}"
+        f" wr: {wr}"
     )
 
 
@@ -187,7 +208,7 @@ def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -
         if web_search is not None:
             count = f"{web_search:>6}"
             if use_color:
-                count = _ANSI["cyan"] + count + _ANSI["reset"]
+                count = _ANSI[_VALUE_COLOR] + count + _ANSI["reset"]
             print(f"WebSearch: {count} request{'s' if web_search != 1 else ''}")
 
         models = data.get("models")
@@ -199,7 +220,7 @@ def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -
             for item in models:
                 num = f"{item['requests']:>6}"
                 if use_color:
-                    num = _ANSI["cyan"] + num + _ANSI["reset"]
+                    num = _ANSI[_VALUE_COLOR] + num + _ANSI["reset"]
                 print(f"{'':>11}{num} {item['name']}")
 
 
@@ -207,14 +228,21 @@ def _color_part(value: str, color: str, use_color: bool) -> str:
     """Color a number but leave a trailing unit label white.
 
     ``value`` is like " 2d", " 2h" or "42m". The numeric part is wrapped in
-    ``color`` and the unit letter in white when color is enabled.
+    ``color`` and the unit letter in the label color when color is enabled.
     """
     if not use_color:
         return value
     return (
         _ANSI[color] + value[:-1] + _ANSI["reset"]
-        + _ANSI["white"] + value[-1] + _ANSI["reset"]
+        + _ANSI[_LABEL_COLOR] + value[-1] + _ANSI["reset"]
     )
+
+
+def _color_num(value: str, color: str, use_color: bool) -> str:
+    """Color a plain number (no unit label) with ``color`` when enabled."""
+    if not use_color:
+        return value
+    return _ANSI[color] + value + _ANSI["reset"]
 
 
 def _format_time_left(iso: str, use_color: bool = False) -> str:
@@ -230,12 +258,12 @@ def _format_time_left(iso: str, use_color: bool = False) -> str:
 
         if hours >= 24:
             days, hours = divmod(hours, 24)
-            days_str = _color_part(f"{days:>2}d", "yellow", use_color)
+            days_str = _color_part(f"{days:>2}d", _DAYS_COLOR, use_color)
         else:
             days_str = "   "
 
-        hours_str = _color_part(f"{hours:>2}h", "cyan", use_color)
-        minutes_str = _color_part(f"{minutes:>2}m", "magenta", use_color)
+        hours_str = _color_part(f"{hours:>2}h", _HOURS_COLOR, use_color)
+        minutes_str = _color_part(f"{minutes:>2}m", _MINUTES_COLOR, use_color)
 
         return f" (in {days_str} {hours_str} {minutes_str})"
     except Exception:
@@ -320,9 +348,20 @@ def _autorefresh_sleep_mini(interval: int, prefix: str) -> None:
     sys.stdout.flush()
 
 
+class _HelpFormatter(argparse.HelpFormatter):
+    """Preserve explicit newlines in option help text."""
+
+    def _split_lines(self, text: str, width: int) -> list[str]:
+        lines: list[str] = []
+        for line in text.splitlines():
+            lines.extend(super()._split_lines(line, width))
+        return lines
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Display your Ollama Cloud quota usage"
+        description="Display your Ollama Cloud quota usage",
+        formatter_class=_HelpFormatter,
     )
     parser.add_argument(
         "-v", "--version", action="version", version=f"ollama-usage {_get_version()}"
@@ -344,7 +383,7 @@ def main():
         const=120,
         default=None,
         metavar="SECONDS",
-        help="Refresh continuously every SECONDS seconds (default: 120). "
+        help="Refresh continuously every SECONDS seconds (default: 120).\n"
         "Shows a timestamp footer with the next refresh time.",
     )
     parser.add_argument(
@@ -375,7 +414,10 @@ def main():
         "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
     )
     parser.add_argument("--theme", default="dark", choices=["dark", "light", "minimal"])
-    parser.add_argument("--size", default="full", choices=["compact", "full"])
+    parser.add_argument(
+        "--size", default=None, choices=["compact", "full"],
+        help="Widget size (default: restore last used size)",
+    )
     parser.add_argument("--opacity", type=float, default=0.92, metavar="0.0-1.0")
     parser.add_argument(
         "--position",

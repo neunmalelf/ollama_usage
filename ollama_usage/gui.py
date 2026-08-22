@@ -144,6 +144,14 @@ def build_lines(data: dict | None, error: str | None = None) -> list[str]:
 #: Color name used for the plan value (shared across CLI, GUI and widget).
 _PLAN_COLOR = "orange"
 
+#: Named colors for the time components (shared across CLI, GUI and widget).
+_DAYS_COLOR    = "yellow"
+_HOURS_COLOR   = "yellow"
+_MINUTES_COLOR = "cyan"
+_SECONDS_COLOR = "magenta"
+_VALUE_COLOR   = "cyan"
+_LABEL_COLOR   = "white"
+
 # ANSI color names -> hex values (standard ANSI palette, matching the
 # terminal version's default rendering). Used for the dark mode.
 COLORS: dict[str, str] = {
@@ -206,15 +214,15 @@ def _countdown_segments(seconds: int) -> list[tuple[str, str | None]]:
     def _slot(value: int, unit: str, color: str, show: bool) -> None:
         if show:
             segs.append((f"{value:>2}", color))
-            segs.append((unit, "white"))
+            segs.append((unit, _LABEL_COLOR))
         else:
             segs.append(("   ", None))
 
-    _slot(d, "d", "orange", bool(d))
+    _slot(d, "d", _DAYS_COLOR, bool(d))
     segs.append((" ", None))
-    _slot(h, "h", "cyan", bool(d or h))
+    _slot(h, "h", _HOURS_COLOR, bool(d or h))
     segs.append((" ", None))
-    _slot(m, "m", "magenta", True)
+    _slot(m, "m", _MINUTES_COLOR, True)
     return segs
 
 
@@ -246,7 +254,7 @@ def build_segments(
         line: list[tuple[str, str | None]] = [
             ("Session  : ", None),
             (f"{pct:>5.1f}", _pct_color_name(pct)),
-            ("%", "white"),
+            ("%", _LABEL_COLOR),
             (" used - reset at ", None),
             (resets, None),
             (" (in ", None),
@@ -261,7 +269,7 @@ def build_segments(
         line = [
             ("Weekly   : ", None),
             (f"{pct:>5.1f}", _pct_color_name(pct)),
-            ("%", "white"),
+            ("%", _LABEL_COLOR),
             (" used - reset at ", None),
             (resets, None),
             (" (in ", None),
@@ -275,7 +283,7 @@ def build_segments(
         lines.append(
             [
                 ("WebSearch: ", None),
-                (f"{web_search}", "cyan"),
+                (f"{web_search}", _VALUE_COLOR),
                 (f" request{'s' if web_search != 1 else ''}", None),
             ]
         )
@@ -287,7 +295,7 @@ def build_segments(
             lines.append(
                 [
                     ("           ", None),
-                    (f"{item['requests']:>5}", "cyan"),
+                    (f"{item['requests']:>5}", _VALUE_COLOR),
                     (f" {item['name']}", None),
                 ]
             )

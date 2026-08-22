@@ -37,6 +37,9 @@ THEMES: dict[str, dict[str, str]] = {
         "yellow": "#f9e2af",
         "red":    "#f38ba8",
         "orange": "#ff8700",
+        "cyan":   "#89dceb",
+        "magenta": "#f5c2e7",
+        "white":  "#cdd6f4",
     },
     "light": {
         "bg":     "#eff1f5",
@@ -48,6 +51,9 @@ THEMES: dict[str, dict[str, str]] = {
         "yellow": "#df8e1d",
         "red":    "#d20f39",
         "orange": "#ff8700",
+        "cyan":   "#04a5e5",
+        "magenta": "#ea76cb",
+        "white":  "#4c4f69",
     },
     "minimal": {
         "bg":     "#0a0a0a",
@@ -59,11 +65,22 @@ THEMES: dict[str, dict[str, str]] = {
         "yellow": "#ffea00",
         "red":    "#ff1744",
         "orange": "#ff8700",
+        "cyan":   "#00e5ff",
+        "magenta": "#ff00ff",
+        "white":  "#f0f0f0",
     },
 }
 
 #: Color name used for the plan value (shared across CLI, GUI and widget).
 _PLAN_COLOR = "orange"
+
+#: Named colors for the time components (shared across CLI, GUI and widget).
+_DAYS_COLOR    = "yellow"
+_HOURS_COLOR   = "yellow"
+_MINUTES_COLOR = "cyan"
+_SECONDS_COLOR = "magenta"
+_VALUE_COLOR   = "cyan"
+_LABEL_COLOR   = "white"
 
 POSITIONS = {
     "top-left":     lambda sw, sh, ww, wh: (10, 10),
@@ -113,6 +130,51 @@ def _fmt_countdown(seconds: int) -> str:
     return f"{s}s"
 
 
+def _countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]:
+    """Return the countdown as colored ``(text, color)`` segments.
+
+    Hours, minutes and seconds numbers use the named time colors; the unit
+    letters use the label color. Days are shown when present.
+    """
+    if seconds <= 0:
+        return [("now", theme["sub"])]
+    d, rem = divmod(seconds, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s   = divmod(rem, 60)
+    segs: list[tuple[str, str]] = []
+    if d:
+        segs.append((f"{d}d", theme[_DAYS_COLOR]))
+        segs.append((" ", theme["sub"]))
+    if d or h:
+        segs.append((f"{h}h", theme[_HOURS_COLOR]))
+        segs.append((" ", theme["sub"]))
+    if m:
+        segs.append((f"{m:02d}m", theme[_MINUTES_COLOR]))
+        segs.append((" ", theme["sub"]))
+    if s or not (d or h or m):
+        segs.append((f"{s:02d}s", theme[_SECONDS_COLOR]))
+    return segs
+
+
+def _load_state() -> dict:
+    """Return the saved widget state dict, or an empty dict on failure."""
+    try:
+        data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        logger.debug("Could not load widget state: %s", _STATE_FILE)
+    return {}
+
+
+def _save_state(state: dict) -> None:
+    """Persist the widget state (position + size) to disk."""
+    try:
+        _STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+    except Exception:
+        logger.debug("Could not save widget state: %s", _STATE_FILE)
+
+
 def check_dependencies() -> None:
     """Vérifie les packages critiques avant de lancer l'UI."""
     import importlib.util
@@ -146,7 +208,7 @@ class OllamaWidget:
         cookie: str | Callable[[], str],
         interval: int   = 30,
         theme: str      = "dark",
-        size: str       = "full",
+        size: str | None = None,
         opacity: float  = 0.92,
         position: str | None = None,
     ) -> None:
@@ -154,7 +216,7 @@ class OllamaWidget:
         self._cookie      = self._cookie_fn()
         self._interval    = max(10, interval)
         self._theme       = THEMES.get(theme, THEMES["dark"])
-        self._size        = size       # "compact" | "full"
+        self._size        = self._resolve_size(size)  # "compact" | "full"
         self._opacity     = max(0.1, min(1.0, opacity))
         self._position    = position   # named anchor or None (restored)
         self._data: dict | None  = None
@@ -236,6 +298,15 @@ class OllamaWidget:
 
     # ---------------------------------------------------------------- position
 
+    def _resolve_size(self, size: str | None) -> str:
+        """Return the widget size, falling back to the saved size."""
+        if size in ("compact", "full"):
+            return size
+        saved = _load_state().get("size")
+        if saved in ("compact", "full"):
+            return saved
+        return "full"
+
     def _restore_position(self) -> None:
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
@@ -248,7 +319,7 @@ class OllamaWidget:
             x, y = POSITIONS[self._position](sw, sh, ww, wh)
         else:
             try:
-                state = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+                state = _load_state()
                 saved_x = state.get("x", default_x)
                 saved_y = state.get("y", default_y)
                 if not isinstance(saved_x, int) or not isinstance(saved_y, int):
@@ -261,16 +332,20 @@ class OllamaWidget:
         self._root.geometry(f"+{x}+{y}")
 
     def _save_position(self) -> None:
-        try:
-            _STATE_FILE.write_text(
-                json.dumps({"x": self._root.winfo_x(), "y": self._root.winfo_y()}),
-                encoding="utf-8"
-            )
-        except Exception:
-            pass
+        state = _load_state()
+        state["x"] = self._root.winfo_x()
+        state["y"] = self._root.winfo_y()
+        state["size"] = self._size
+        _save_state(state)
 
     # ---------------------------------------------------------------- menu / toggle
 
+    def _show_menu(self, event: tk.Event) -> None:
+        try:
+            if self._root.winfo_exists():
+                self._menu.tk_popup(event.x_root, event.y_root)
+        except tk.TclError:
+            pass
         finally:
             # Release the grab so the menu closes once an item is selected.
             try:
@@ -280,6 +355,7 @@ class OllamaWidget:
 
     def _toggle_size(self) -> None:
         self._size = "compact" if self._size == "full" else "full"
+        self._save_position()
         self._setup_canvas()
         self._draw()
 
@@ -336,6 +412,17 @@ class OllamaWidget:
             self._draw_compact()
         else:
             self._draw_full()
+
+    def _draw_segments(
+        self, c: tk.Canvas, x: int, y: int,
+        segments: list[tuple[str, str]], font: tuple,
+    ) -> None:
+        """Render colored text segments left-to-right, advancing ``x``."""
+        for text, color in segments:
+            item = c.create_text(x, y, text=text, anchor="nw",
+                                 fill=color, font=font)
+            _, _, x2, _ = c.bbox(item)
+            x = x2
 
     def _draw_compact(self) -> None:
         c, t   = self._canvas, self._theme
@@ -427,8 +514,12 @@ class OllamaWidget:
             y += bh + 5
 
             # Countdown
-            c.create_text(bar_x, y, text=f"resets in {_fmt_countdown(secs)}",
-                          anchor="nw", fill=t["sub"], font=(_FONT, 8))
+            prefix = c.create_text(bar_x, y, text="resets in ", anchor="nw",
+                                   fill=t["sub"], font=(_FONT, 8))
+            _, _, px2, _ = c.bbox(prefix)
+            self._draw_segments(
+                c, px2, y, _countdown_segments(secs, t), (_FONT, 8)
+            )
             y += 28
 
         ws = self._data.get("web_search_requests")
