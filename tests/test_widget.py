@@ -128,7 +128,7 @@ class TestMiniSegments:
         session_pct = next(
             t for t, c in segs if c == w.THEMES["minimal"][w._SESSION_PCT_COLOR]
         )
-        assert session_pct == "90.0%"
+        assert session_pct == "90.0"
 
     def test_web_search_absent_shows_zero(self) -> None:
         segs = w._mini_segments(_make_data(web_search_requests=None), w.THEMES["minimal"])

@@ -267,8 +267,12 @@ class TestCLIColoration:
     @patch("ollama_usage.cli._HAS_COLOR", new=True)
     def test_color_enabled_on_tty_without_no_color(self, mock_isatty) -> None:
         from ollama_usage.cli import _color_pct, _ANSI
-        # When color is enabled, it should output colored text
-        expected = _ANSI["yellow"] + " 75.0%" + _ANSI["reset"]
+        # When color is enabled, the number is severity-colored and the % is
+        # in the label color.
+        expected = (
+            _ANSI["yellow"] + " 75.0" + _ANSI["reset"]
+            + _ANSI["white"] + "%" + _ANSI["reset"]
+        )
         assert _color_pct(75.0) == expected
 
 

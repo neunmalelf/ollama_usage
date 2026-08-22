@@ -195,10 +195,8 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     segs.append((plan, theme[_PLAN_COLOR]))
     segs.append((")", theme["sub"]))
     segs.append((" s: ", theme["sub"]))
-    segs.append((
-        f"{session.get('used_pct', 0.0):.1f}%",
-        theme[_SESSION_PCT_COLOR],
-    ))
+    segs.append((f"{session.get('used_pct', 0.0):.1f}", theme[_SESSION_PCT_COLOR]))
+    segs.append(("%", theme[_LABEL_COLOR]))
     segs.append((" (", theme["sub"]))
     segs.extend(_mini_countdown_segments(
         _seconds_until(session.get("resets_at", "")), theme
@@ -206,10 +204,8 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     segs.append((")", theme["sub"]))
     segs.append((" |", theme["sub"]))
     segs.append((" w: ", theme["sub"]))
-    segs.append((
-        f"{weekly.get('used_pct', 0.0):.1f}%",
-        _pct_color(weekly.get("used_pct", 0.0), theme),
-    ))
+    segs.append((f"{weekly.get('used_pct', 0.0):.1f}", _pct_color(weekly.get("used_pct", 0.0), theme)))
+    segs.append(("%", theme[_LABEL_COLOR]))
     segs.append((" (", theme["sub"]))
     segs.extend(_mini_countdown_segments(
         _seconds_until(weekly.get("resets_at", "")), theme
@@ -543,10 +539,13 @@ class OllamaWidget:
             pct_color = t[_SESSION_PCT_COLOR] if label == "Session" else bar_color
             secs      = _seconds_until(iso)
 
-            # Label + percentage
+            # Label + percentage (the % uses the label color)
             c.create_text(bar_x,      y, text=label,       anchor="nw",
                           fill=t["fg"], font=(_FONT, 9, "bold"))
-            c.create_text(bar_x + bw, y, text=f"{pct:.1f}%", anchor="ne",
+            pct_id = c.create_text(bar_x + bw, y, text="%", anchor="ne",
+                                   fill=t[_LABEL_COLOR], font=(_FONT, 9, "bold"))
+            _, _, pct_x1, _ = c.bbox(pct_id)
+            c.create_text(pct_x1, y, text=f"{pct:.1f}", anchor="ne",
                           fill=pct_color, font=(_FONT, 9, "bold"))
             y += 14
 

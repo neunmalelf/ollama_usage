@@ -113,7 +113,10 @@ def _use_color() -> bool:
 
 
 def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
-    """Return the percentage string colored by severity and padded for right-alignment."""
+    """Return the percentage string colored by severity and padded for right-alignment.
+
+    The number is colored by severity; the ``%`` symbol uses the label color.
+    """
     text = f"{pct:.1f}%"
     padded_text = f"{text:>6}"
     if use_color is None:
@@ -126,7 +129,11 @@ def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
         color = _ANSI["yellow"]
     else:
         color = _ANSI["red"]
-    return color + padded_text + _ANSI["reset"]
+    num = padded_text[:-1]  # number part, right-aligned (excludes the %)
+    return (
+        color + num + _ANSI["reset"]
+        + _ANSI[_LABEL_COLOR] + "%" + _ANSI["reset"]
+    )
 
 
 def _format_remaining_compact(iso: str, use_color: bool = False) -> str:
