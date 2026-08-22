@@ -93,11 +93,17 @@ BROWSERS = {
 }
 
 
-def _color_pct(pct: float) -> str:
+def _use_color() -> bool:
+    """Return True when ANSI color output is enabled for stdout."""
+    return _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
+
+
+def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
     """Return the percentage string colored by severity and padded for right-alignment."""
     text = f"{pct:.1f}%"
     padded_text = f"{text:>6}"
-    use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
+    if use_color is None:
+        use_color = _use_color()
     if not use_color:
         return padded_text
     if pct < 50:
@@ -107,6 +113,92 @@ def _color_pct(pct: float) -> str:
     else:
         color = _ANSI["red"]
     return color + padded_text + _ANSI["reset"]
+
+
+def _format_remaining_compact(iso: str) -> str:
+    """Return remaining time as ``[dd] hh:mm`` (days omitted when zero)."""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        diff = dt - datetime.now(timezone.utc)
+        total_seconds = int(diff.total_seconds())
+        if total_seconds <= 0:
+            return "00:00"
+        days, rem = divmod(total_seconds, 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, _ = divmod(rem, 60)
+        if days:
+            return f"{days}d {hours:02d}:{minutes:02d}"
+        return f"{hours:02d}:{minutes:02d}"
+    except Exception:
+        return ""
+
+
+def _format_countdown(seconds: int) -> str:
+    """Return ``(mm:ss)`` or ``(ss)`` for the autorefresh countdown."""
+    if seconds >= 60:
+        minutes, secs = divmod(seconds, 60)
+        return f"({minutes}:{secs:02d})"
+    return f"({seconds})"
+
+
+def _mini_line(data: dict, use_color: bool) -> str:
+    """Build the single-line minidisplay string (no trailing newline)."""
+    plan = data["plan"]
+    if use_color:
+        plan = f"{_ANSI['orange']}{plan}{_ANSI['reset']}"
+    session_pct = _color_pct(data["session"]["used_pct"], use_color)
+    weekly_pct = _color_pct(data["weekly"]["used_pct"], use_color)
+    session_left = _format_remaining_compact(data["session"]["resets_at"])
+    weekly_left = _format_remaining_compact(data["weekly"]["resets_at"])
+    web_search = data.get("web_search_requests")
+    wr = "0" if web_search is None else str(web_search)
+    if use_color:
+        wr = f"{_ANSI['cyan']}{wr}{_ANSI['reset']}"
+    return (
+        f"olu - s: {session_pct} ({session_left})"
+        f" | w: {weekly_pct} ({weekly_left})"
+        f" wr: {wr} {plan}"
+    )
+
+
+def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -> None:
+    if quiet:
+        return
+    if as_json:
+        print(json.dumps(data, indent=2))
+    elif minidisplay:
+        print(_mini_line(data, _use_color()))
+    else:
+        use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
+        plan = data['plan']
+        if use_color:
+            plan = f" {_ANSI['orange']}{plan}{_ANSI['reset']}"
+        print("")
+        print(f"Plan     :  {plan}")
+        print(
+            f"Session  : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'], use_color)}"
+        )
+        print(
+            f"Weekly   : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'], use_color)}"
+        )
+        web_search = data.get("web_search_requests")
+        if web_search is not None:
+            count = f"{web_search:>6}"
+            if use_color:
+                count = _ANSI["cyan"] + count + _ANSI["reset"]
+            print(f"WebSearch: {count} request{'s' if web_search != 1 else ''}")
+
+        models = data.get("models")
+        if models:
+            header = "Model calls this week:"
+            if use_color:
+                header = f"{_ANSI['grey']}{header}{_ANSI['reset']}"
+            print(header)
+            for item in models:
+                num = f"{item['requests']:>6}"
+                if use_color:
+                    num = _ANSI["cyan"] + num + _ANSI["reset"]
+                print(f"{'':>11}{num} {item['name']}")
 
 
 def _color_part(value: str, color: str, use_color: bool) -> str:
@@ -147,43 +239,6 @@ def _format_time_left(iso: str, use_color: bool = False) -> str:
     except Exception:
         return ""
 
-
-def display(data: dict, as_json: bool, quiet: bool) -> None:
-    if quiet:
-        return
-    if as_json:
-        print(json.dumps(data, indent=2))
-    else:
-        use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
-        plan = data['plan']
-        if use_color:
-            plan = f" {_ANSI['orange']}{plan}{_ANSI['reset']}"
-        print("")
-        print(f"Plan     :  {plan}")
-        print(
-            f"Session  : {_color_pct(data['session']['used_pct'])} used - reset at {data['session']['resets_at']}{_format_time_left(data['session']['resets_at'], use_color)}"
-        )
-        print(
-            f"Weekly   : {_color_pct(data['weekly']['used_pct'])} used - reset at {data['weekly']['resets_at']}{_format_time_left(data['weekly']['resets_at'], use_color)}"
-        )
-        web_search = data.get("web_search_requests")
-        if web_search is not None:
-            count = f"{web_search:>6}"
-            if use_color:
-                count = _ANSI["cyan"] + count + _ANSI["reset"]
-            print(f"WebSearch: {count} request{'s' if web_search != 1 else ''}")
-
-        models = data.get("models")
-        if models:
-            header = "Model calls this week:"
-            if use_color:
-                header = f"{_ANSI['grey']}{header}{_ANSI['reset']}"
-            print(header)
-            for item in models:
-                num = f"{item['requests']:>6}"
-                if use_color:
-                    num = _ANSI["cyan"] + num + _ANSI["reset"]
-                print(f"{'':>11}{num} {item['name']}")
 
 
 def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
@@ -246,12 +301,34 @@ def _autorefresh_sleep(interval: int) -> None:
     sys.stdout.flush()
 
 
+def _autorefresh_sleep_mini(interval: int, prefix: str) -> None:
+    """Sleep for ``interval`` seconds, appending a cyan ``(mm:ss)`` countdown to ``prefix``."""
+    if not sys.stdout.isatty():
+        time.sleep(interval)
+        return
+    use_color = _use_color()
+    for remaining in range(interval, 0, -1):
+        countdown = _format_countdown(remaining)
+        if use_color:
+            countdown = f"{_ANSI['cyan']}{countdown}{_ANSI['reset']}"
+        sys.stdout.write("\r" + prefix + " " + countdown + "   ")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Display your Ollama Cloud quota usage"
     )
     parser.add_argument(
         "-v", "--version", action="version", version=f"ollama-usage {_get_version()}"
+    )
+    parser.add_argument(
+        "--minidisplay",
+        action="store_true",
+        help="Single-line compact output (olu - s: ... | w: ... wr: ... plan)",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")
@@ -361,13 +438,19 @@ def main():
 
         if args.autorefresh is not None:
             auto_interval = max(1, args.autorefresh)
+            mini = args.minidisplay and not args.json and not args.quiet
+            line = ""
             try:
                 while True:
-                    sys.stdout.write("\033[2J\033[H")
-                    sys.stdout.flush()
+                    if not mini:
+                        sys.stdout.write("\033[2J\033[H")
+                        sys.stdout.flush()
                     try:
                         data = get_usage(cookie)
-                        display(data, args.json, args.quiet)
+                        if mini:
+                            line = _mini_line(data, _use_color())
+                        else:
+                            display(data, args.json, args.quiet)
                         if args.notify:
                             check_and_notify(
                                 data, args.notify_threshold, notify_state
@@ -385,7 +468,10 @@ def main():
                                 )
                                 cookie = get_current_cookie()
                                 data = get_usage(cookie)
-                                display(data, args.json, args.quiet)
+                                if mini:
+                                    line = _mini_line(data, _use_color())
+                                else:
+                                    display(data, args.json, args.quiet)
                                 if args.notify:
                                     check_and_notify(
                                         data, args.notify_threshold, notify_state
@@ -403,12 +489,15 @@ def main():
                             f"Network error: {e} — retrying in {auto_interval}s",
                             file=sys.stderr,
                         )
-                    _autorefresh_sleep(auto_interval)
+                    if mini:
+                        _autorefresh_sleep_mini(auto_interval, line)
+                    else:
+                        _autorefresh_sleep(auto_interval)
             except KeyboardInterrupt:
                 print("\nStopped.")
 
         data = get_usage(cookie)
-        display(data, args.json, args.quiet)
+        display(data, args.json, args.quiet, args.minidisplay)
         if args.notify:
             check_and_notify(data, args.notify_threshold, notify_state)
         if _check_alert(data, args.alert, args.quiet):
