@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import pathlib
-import sys
 import threading
 import tkinter as tk
 from datetime import datetime, timezone
@@ -366,7 +365,6 @@ class OllamaWidget:
         except Exception:
             pass
         self._root.destroy()
-        sys.exit(0)
     # ---------------------------------------------------------------- data
 
     def _fetch_async(self) -> None:

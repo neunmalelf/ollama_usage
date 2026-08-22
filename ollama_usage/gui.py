@@ -632,7 +632,6 @@ class OllamaGui:
             self._root.destroy()
         except Exception:
             pass
-        sys.exit(0)
 
     def run(self) -> None:
         self._root.mainloop()
