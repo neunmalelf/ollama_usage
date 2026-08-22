@@ -380,6 +380,7 @@ def main():
         action="store_true",
         help="Single-line compact output, e.g.:\n"
         "  olu (pro) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) wr: 2\n"
+        "  olu = ollama usage, (pro) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
         "  wr = web search requests this session\n"
         "  remaining time is [dd] hh:mm (days omitted when zero)",
