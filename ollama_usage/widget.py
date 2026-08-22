@@ -81,6 +81,9 @@ _SECONDS_COLOR = "magenta"
 _VALUE_COLOR   = "cyan"
 _LABEL_COLOR   = "white"
 
+#: Color used for the session percentage (green, shown bold).
+_SESSION_PCT_COLOR = "green"
+
 POSITIONS = {
     "top-left":     lambda sw, sh, ww, wh: (10, 10),
     "top-right":    lambda sw, sh, ww, wh: (sw - ww - 10, 10),
@@ -194,7 +197,7 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     segs.append((" s: ", theme["sub"]))
     segs.append((
         f"{session.get('used_pct', 0.0):.1f}%",
-        _pct_color(session.get("used_pct", 0.0), theme),
+        theme[_SESSION_PCT_COLOR],
     ))
     segs.append((" (", theme["sub"]))
     segs.extend(_mini_countdown_segments(
@@ -535,14 +538,16 @@ class OllamaWidget:
             ("Session", self._data["session"]["used_pct"], self._data["session"]["resets_at"]),
             ("Weekly",  self._data["weekly"]["used_pct"],  self._data["weekly"]["resets_at"]),
         ]:
-            color   = _pct_color(pct, t)
-            secs    = _seconds_until(iso)
+            bar_color = _pct_color(pct, t)
+            # Session percentage is always green (bold); weekly stays severity-colored.
+            pct_color = t[_SESSION_PCT_COLOR] if label == "Session" else bar_color
+            secs      = _seconds_until(iso)
 
             # Label + percentage
             c.create_text(bar_x,      y, text=label,       anchor="nw",
                           fill=t["fg"], font=(_FONT, 9, "bold"))
             c.create_text(bar_x + bw, y, text=f"{pct:.1f}%", anchor="ne",
-                          fill=color, font=(_FONT, 9, "bold"))
+                          fill=pct_color, font=(_FONT, 9, "bold"))
             y += 14
 
             # Bar background
@@ -552,7 +557,7 @@ class OllamaWidget:
             filled = int(bw * min(pct, 100.0) / 100.0)
             if filled > 0:
                 c.create_rectangle(bar_x, y, bar_x + filled, y + bh,
-                                   fill=color, outline="", width=0)
+                                   fill=bar_color, outline="", width=0)
             y += bh + 5
 
             # Countdown

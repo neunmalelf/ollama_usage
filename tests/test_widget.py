@@ -120,10 +120,25 @@ class TestMiniSegments:
         plan = next(t for t, c in segs if c == w.THEMES["minimal"][w._PLAN_COLOR])
         assert plan == "pro"
 
+    def test_session_percentage_is_green(self) -> None:
+        segs = w._mini_segments(
+            _make_data(session={"used_pct": 90.0, "resets_at": "2026-04-04T17:00:00Z"}),
+            w.THEMES["minimal"],
+        )
+        session_pct = next(
+            t for t, c in segs if c == w.THEMES["minimal"][w._SESSION_PCT_COLOR]
+        )
+        assert session_pct == "90.0%"
+
     def test_web_search_absent_shows_zero(self) -> None:
         segs = w._mini_segments(_make_data(web_search_requests=None), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
         assert text.endswith("wr: 0")
+
+    def test_countdown_compact_format(self) -> None:
+        segs = w._mini_countdown_segments(90061, w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert text == "1d 01:01"
 
 class TestCountdownSegments:
 
