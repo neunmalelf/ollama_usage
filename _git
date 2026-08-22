@@ -1,0 +1,92 @@
+#!/bin/bash
+# _git - stage and commit the ddtiny working tree with a timestamped comment.
+#   usage: ./_git [OPTIONS]
+#   options:
+#     -h, --help    show this help and exit
+#     --version     show the _git version and exit
+#   flow: git add . -> optional comment (editable) -> git commit -m "<ts> <comment>"
+
+__VERSION__="1.0.20260821131347"
+_jobname="[_git]"
+
+set -u
+
+# --- usage -------------------------------------------------------------------
+usage() {
+    cat <<EOF
+_git v${__VERSION__} - stage and commit the ddtiny working tree
+
+usage: ./_git [OPTIONS]
+
+options:
+  -h, --help    show this help and exit
+  --version     show the _git version and exit
+
+flow:
+  1. git add .
+  2. ask for an optional commit comment
+  3. if a comment is given, ask whether to edit it (loop until accepted)
+  4. git commit -m "<timestamp> <comment>"
+     (timestamp = Europe/Berlin YYYYMMDDhhmmss, captured at commit time)
+
+exit code: 0 on success, 1 on failure
+EOF
+}
+
+# --- argument parsing --------------------------------------------------------
+case "${1:-}" in
+    -h|--help)  usage; exit 0 ;;
+    --version)  echo "${_jobname} v${__VERSION__}"; exit 0 ;;
+    "")         : ;;
+    *)          echo "${_jobname} unknown option: ${1}" >&2; usage >&2; exit 1 ;;
+esac
+
+# --- work relative to this script's directory --------------------------------
+cd "$(dirname "$0")" || exit 1
+
+# --- must be a git repository ------------------------------------------------
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    echo "${_jobname} not a git repository" >&2
+    exit 1
+fi
+
+# --- stage everything --------------------------------------------------------
+echo "${_jobname} git add ."
+git add . || { echo "${_jobname} git add FAILED" >&2; exit 1; }
+
+if [ -z "$(git status --porcelain)" ]; then
+    echo "${_jobname} nothing to commit - working tree clean"
+    exit 0
+fi
+
+# --- optional comment (editable) ---------------------------------------------
+comment=""
+while true; do
+    printf "commit comment (optional): "
+    read -r new_comment || { echo "${_jobname} aborted"; exit 1; }
+    if [ -n "$new_comment" ]; then
+        comment="$new_comment"
+        printf "edit this comment? [y/N]: "
+        read -r edit || { echo "${_jobname} aborted"; exit 1; }
+        case "$edit" in
+            y|Y|yes|YES) continue ;;
+            *)            break ;;
+        esac
+    else
+        break
+    fi
+done
+
+# --- commit with a timestamped message ---------------------------------------
+# TZ=Europe/Berlin date is unreliable inside scripts on MSYS/Git Bash (returns
+# UTC, 2h off). The system timezone is already Europe/Berlin, so use Python's
+# local time (the same source the project's history/version timestamps use).
+ts="$(python -c "import datetime; print(datetime.datetime.now().strftime('%Y%m%d%H%M%S'))")"
+if [ -n "$comment" ]; then
+    message="${ts} ${comment}"
+else
+    message="${ts}"
+fi
+echo "${_jobname} git commit -m \"${message}\""
+git commit -m "$message" || { echo "${_jobname} git commit FAILED" >&2; exit 1; }
+git log -1 --oneline

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Pre-commit hook: run `ruff check` and `ruff format --check` on staged
+# Python files (dd.py, dd_utils.py, ...). Installed into .git/hooks/ via
+# `bash hooks/install.sh` — re-run the installer after editing this file.
+
+__VERSION__="1.1.20260804132124"
+
+set -euo pipefail
+
+# Skip silently if ruff is not installed — never block commits for a
+# missing tool, only for actual lint/format violations.
+if ! command -v ruff >/dev/null 2>&1; then
+    echo "pre-commit: 'ruff' not found — skipping lint (install with: pip install ruff)"
+    exit 0
+fi
+
+# Staged Python files (NUL-delimited so paths with spaces/newlines are safe).
+# --diff-filter=d excludes deletions but keeps renames and type changes.
+# Note: ruff lints the working-tree content of the staged paths, so a file
+# edited after `git add` is checked at its current working-tree state.
+STAGED_PY=()
+while IFS= read -r -d '' f; do
+    STAGED_PY+=("$f")
+done < <(git diff --cached --name-only -z --diff-filter=d -- '*.py')
+
+if [ "${#STAGED_PY[@]}" -eq 0 ]; then
+    exit 0
+fi
+
+echo "pre-commit: ruff check + format --check on ${#STAGED_PY[@]} staged Python file(s)..."
+
+if ! ruff check -- "${STAGED_PY[@]}"; then
+    echo "pre-commit: 'ruff check' failed — fix the issues, re-add, and commit again." >&2
+    echo "pre-commit: to skip this check for a commit: git commit --no-verify" >&2
+    exit 1
+fi
+
+if ! ruff format --check -- "${STAGED_PY[@]}"; then
+    echo "pre-commit: 'ruff format --check' failed — run 'ruff format' on the files above, then re-add." >&2
+    echo "pre-commit: to skip this check for a commit: git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0
