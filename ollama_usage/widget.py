@@ -495,9 +495,9 @@ class OllamaWidget:
                           font=(_FONT, 9))
             return
 
-        # Status dot
+        # Autorefresh indicator (A) — green when data is fresh, red on error.
         dot = t["green"] if self._data and not self._error else t["red"]
-        c.create_text(w - p, p, text="●", anchor="ne",
+        c.create_text(w - p, p, text="A", anchor="ne",
                       fill=dot, font=(_FONT, 8))
 
         # Minidisplay line (same layout as --minidisplay, no bars)
@@ -518,8 +518,9 @@ class OllamaWidget:
         _, _, prefix_x2, _ = c.bbox(prefix_id)
         c.create_text(prefix_x2, p, text=plan, anchor="nw",
                       fill=t[_PLAN_COLOR], font=(_FONT, 8))
+        # Autorefresh indicator (A) — green when data is fresh, red on error.
         dot = t["green"] if self._data and not self._error else t["red"]
-        c.create_text(w - p, p, text="●", anchor="ne",
+        c.create_text(w - p, p, text="A", anchor="ne",
                       fill=dot, font=(_FONT, 8))
 
         if self._error or not self._data:
