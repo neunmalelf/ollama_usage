@@ -15,7 +15,9 @@ from ollama_usage.cli import (
     _format_remaining_compact,
     _format_countdown,
     _mini_line,
+    _mini_horizontal,
     _autorefresh_sleep_mini,
+    _autorefresh_sleep_horizontal,
 )
 
 
@@ -422,6 +424,33 @@ class TestMiniLine:
         assert _ANSI["grey"] + "|" + _ANSI["reset"] in line
 
 
+class TestMiniHorizontal:
+
+    def test_plain_output(self) -> None:
+        data = make_data(42.0, 77.0, web_search_requests=2)
+        out = _mini_horizontal(data, use_color=False)
+        lines = out.split("\n")
+        assert len(lines) == 4
+        assert lines[0] == "olu (free)"
+        assert lines[1].startswith("s:  42.0% (")
+        assert lines[2].startswith("w:  77.0% (")
+        assert lines[3] == "wr: 2"
+
+    def test_web_search_absent_shows_zero(self) -> None:
+        data = make_data(42.0, 77.0)
+        out = _mini_horizontal(data, use_color=False)
+        assert out.endswith("\nwr: 0")
+
+    def test_color_wraps_plan_and_web_search(self) -> None:
+        from ollama_usage.cli import _ANSI
+        data = make_data(42.0, 77.0, web_search_requests=2)
+        out = _mini_horizontal(data, use_color=True)
+        assert _ANSI["orange"] + "free" + _ANSI["reset"] in out
+        assert _ANSI["cyan"] + "2" + _ANSI["reset"] in out
+        assert _ANSI["grey"] + "(" + _ANSI["reset"] in out
+        assert _ANSI["grey"] + ")" + _ANSI["reset"] in out
+
+
 class TestDisplayMinidisplay:
 
     def test_minidisplay_prints_single_line(self, capsys) -> None:
@@ -436,6 +465,17 @@ class TestDisplayMinidisplay:
         out = capsys.readouterr().out
         parsed = json.loads(out)
         assert parsed["session"]["used_pct"] == 42.0
+
+    def test_horizontal_prints_multi_line(self, capsys) -> None:
+        display(
+            make_data(42.0, 77.0, web_search_requests=2),
+            as_json=False, quiet=False, minidisplay_horizontal=True,
+        )
+        out = capsys.readouterr().out
+        assert out.count("\n") == 4
+        assert out.startswith("olu (free)")
+        assert "\ns:  42.0% (" in out
+        assert "\nwr: 2" in out
 
 
 class TestAutorefreshSleepMini:
@@ -463,5 +503,34 @@ class TestAutorefreshSleepMini:
              patch("ollama_usage.cli.time.sleep"), \
              patch.dict("os.environ", {}, clear=True):
             _autorefresh_sleep_mini(2, "prefix")
+        out = capsys.readouterr().out
+        assert _ANSI["grey"] + "(2)" + _ANSI["reset"] in out
+
+
+class TestAutorefreshSleepHorizontal:
+
+    def test_non_tty_sleeps_once(self) -> None:
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=False), \
+             patch("ollama_usage.cli.time.sleep") as mock_sleep:
+            _autorefresh_sleep_horizontal(120, "a\nb\nc\nd")
+        mock_sleep.assert_called_once_with(120)
+
+    def test_writes_block_and_countdown(self, capsys) -> None:
+        block = "olu (free)\ns:  42.0% (00:00)\nw:  77.0% (00:00)\nwr: 2"
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
+             patch("ollama_usage.cli.time.sleep"), \
+             patch.dict("os.environ", {"NO_COLOR": "1"}):
+            _autorefresh_sleep_horizontal(2, block)
+        out = capsys.readouterr().out
+        assert block in out
+        assert "(2)" in out
+        assert "(1)" in out
+
+    def test_countdown_is_decorator_when_colored(self, capsys) -> None:
+        from ollama_usage.cli import _ANSI
+        with patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
+             patch("ollama_usage.cli.time.sleep"), \
+             patch.dict("os.environ", {}, clear=True):
+            _autorefresh_sleep_horizontal(2, "olu\ns: x")
         out = capsys.readouterr().out
         assert _ANSI["grey"] + "(2)" + _ANSI["reset"] in out
