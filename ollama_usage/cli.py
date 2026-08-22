@@ -435,8 +435,9 @@ def main():
     parser.add_argument("--opacity", type=float, default=0.92, metavar="0.0-1.0")
     parser.add_argument(
         "--position",
-        default="top-left",
+        default=None,
         choices=["top-left", "top-right", "bottom-left", "bottom-right"],
+        help="Widget screen corner (default: restore last used position)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logs")
     args = parser.parse_args()
