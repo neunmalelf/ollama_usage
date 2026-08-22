@@ -513,9 +513,8 @@ def main():
             line = ""
             try:
                 while True:
-                    if not mini:
-                        sys.stdout.write("\033[2J\033[H")
-                        sys.stdout.flush()
+                    sys.stdout.write("\033[2J\033[H")
+                    sys.stdout.flush()
                     try:
                         data = get_usage(cookie)
                         if mini:
