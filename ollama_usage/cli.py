@@ -403,8 +403,8 @@ def main():
     parser.add_argument(
         "--alert",
         type=float,
-        metavar="PCT",
-        help="Exit with code 1 if session or weekly usage exceeds PCT%%",
+        metavar="PERCENTAGE",
+        help="Exit with code 1 if session or weekly usage exceeds PERCENTAGE (%%)",
     )
     parser.add_argument(
         "--quiet",
@@ -420,8 +420,8 @@ def main():
         "--notify-threshold",
         type=float,
         default=80.0,
-        metavar="PCT",
-        help="Threshold for desktop notifications in %% (default: 80, requires --notify)",
+        metavar="PERCENTAGE",
+        help="Threshold for desktop notifications in PERCENTAGE (%%) (default: 80, requires --notify)",
     )
     parser.add_argument("--widget", action="store_true", help="Launch desktop widget")
     parser.add_argument(
