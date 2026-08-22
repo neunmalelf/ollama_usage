@@ -194,18 +194,56 @@ def _mini_line(data: dict, use_color: bool) -> str:
     )
 
 
-def display(data: dict, as_json: bool, quiet: bool, minidisplay: bool = False) -> None:
+def _mini_horizontal(data: dict, use_color: bool) -> str:
+    """Build the multi-line minidisplay (each info item on its own line)."""
+    plan = data["plan"]
+    if use_color:
+        plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
+    session_pct = _color_pct(data["session"]["used_pct"], use_color)
+    weekly_pct = _color_pct(data["weekly"]["used_pct"], use_color)
+    session_left = _format_remaining_compact(data["session"]["resets_at"], use_color)
+    weekly_left = _format_remaining_compact(data["weekly"]["resets_at"], use_color)
+    web_search = data.get("web_search_requests")
+    wr = "0" if web_search is None else str(web_search)
+    if use_color:
+        wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
+    paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
+    paren_end = _ANSI[decorator_color] + ")" + _ANSI["reset"] if use_color else ")"
+    return "\n".join(
+        [
+            f"olu {paren}{plan}{paren_end}",
+            f"s: {session_pct} {paren}{session_left}{paren_end}",
+            f"w: {weekly_pct} {paren}{weekly_left}{paren_end}",
+            f"wr: {wr}",
+        ]
+    )
+
+
+def _mini_display(data: dict, use_color: bool, horizontal: bool) -> str:
+    """Return the single-line or multi-line minidisplay string."""
+    if horizontal:
+        return _mini_horizontal(data, use_color)
+    return _mini_line(data, use_color)
+
+
+def display(
+    data: dict,
+    as_json: bool,
+    quiet: bool,
+    minidisplay: bool = False,
+    minidisplay_horizontal: bool = False,
+) -> None:
     if quiet:
         return
     if as_json:
         print(json.dumps(data, indent=2))
-    elif minidisplay:
-        # Clear the terminal first so only the minidisplay line is visible
+    elif minidisplay_horizontal or minidisplay:
+        # Clear the terminal first so only the minidisplay output is visible
         # (no leftover prompt). Only when stdout is a TTY.
         if sys.stdout.isatty():
             sys.stdout.write("\033[2J\033[H")
             sys.stdout.flush()
-        print(_mini_line(data, _use_color()))
+        print(_mini_display(data, _use_color(), minidisplay_horizontal))
     else:
         use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
         plan = data['plan']
@@ -365,6 +403,23 @@ def _autorefresh_sleep_mini(interval: int, prefix: str) -> None:
     sys.stdout.flush()
 
 
+def _autorefresh_sleep_horizontal(interval: int, block: str) -> None:
+    """Sleep for ``interval`` seconds, redrawing a multi-line ``block`` with a decorator ``(mm:ss)`` countdown appended."""
+    if not sys.stdout.isatty():
+        time.sleep(interval)
+        return
+    use_color = _use_color()
+    for remaining in range(interval, 0, -1):
+        countdown = _format_countdown(remaining)
+        if use_color:
+            countdown = f"{_ANSI[decorator_color]}{countdown}{_ANSI['reset']}"
+        sys.stdout.write("\033[2J\033[H" + block + "\n" + countdown + "   ")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.flush()
+
+
 class _HelpFormatter(argparse.HelpFormatter):
     """Preserve explicit newlines in option help text."""
 
@@ -393,6 +448,16 @@ def main():
         "  wr = web search requests this session\n"
         "  remaining time is [dd] hh:mm (days omitted when zero)\n"
         "  clears the terminal before showing the line (TTY only)",
+    )
+    parser.add_argument(
+        "--minidisplay-horizontal",
+        action="store_true",
+        help="Multi-line compact output, each info on its own line, e.g.:\n"
+        "  olu (pro)\n"
+        "  s:  42.0%% (02:46)\n"
+        "  w:  77.0%% (1d 06:46)\n"
+        "  wr: 2\n"
+        "  clears the terminal before showing the output (TTY only)",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")
@@ -510,7 +575,8 @@ def main():
 
         if args.autorefresh is not None:
             auto_interval = max(1, args.autorefresh)
-            mini = args.minidisplay and not args.json and not args.quiet
+            mini = (args.minidisplay or args.minidisplay_horizontal) and not args.json and not args.quiet
+            horizontal = bool(args.minidisplay_horizontal) and mini
             line = ""
             try:
                 while True:
@@ -519,7 +585,7 @@ def main():
                     try:
                         data = get_usage(cookie)
                         if mini:
-                            line = _mini_line(data, _use_color())
+                            line = _mini_display(data, _use_color(), horizontal)
                         else:
                             display(data, args.json, args.quiet)
                         if args.notify:
@@ -540,7 +606,7 @@ def main():
                                 cookie = get_current_cookie()
                                 data = get_usage(cookie)
                                 if mini:
-                                    line = _mini_line(data, _use_color())
+                                    line = _mini_display(data, _use_color(), horizontal)
                                 else:
                                     display(data, args.json, args.quiet)
                                 if args.notify:
@@ -561,14 +627,19 @@ def main():
                             file=sys.stderr,
                         )
                     if mini:
-                        _autorefresh_sleep_mini(auto_interval, line)
+                        if horizontal:
+                            _autorefresh_sleep_horizontal(auto_interval, line)
+                        else:
+                            _autorefresh_sleep_mini(auto_interval, line)
                     else:
                         _autorefresh_sleep(auto_interval)
             except KeyboardInterrupt:
                 print("\nStopped.")
 
         data = get_usage(cookie)
-        display(data, args.json, args.quiet, args.minidisplay)
+        display(
+            data, args.json, args.quiet, args.minidisplay, args.minidisplay_horizontal
+        )
         if args.notify:
             check_and_notify(data, args.notify_threshold, notify_state)
         if _check_alert(data, args.alert, args.quiet):
