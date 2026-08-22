@@ -344,7 +344,7 @@ def _autorefresh_sleep(interval: int) -> None:
 
 
 def _autorefresh_sleep_mini(interval: int, prefix: str) -> None:
-    """Sleep for ``interval`` seconds, appending a cyan ``(mm:ss)`` countdown to ``prefix``."""
+    """Sleep for ``interval`` seconds, appending a decorator ``(mm:ss)`` countdown to ``prefix``."""
     if not sys.stdout.isatty():
         time.sleep(interval)
         return
@@ -352,7 +352,7 @@ def _autorefresh_sleep_mini(interval: int, prefix: str) -> None:
     for remaining in range(interval, 0, -1):
         countdown = _format_countdown(remaining)
         if use_color:
-            countdown = f"{_ANSI['cyan']}{countdown}{_ANSI['reset']}"
+            countdown = f"{_ANSI[decorator_color]}{countdown}{_ANSI['reset']}"
         sys.stdout.write("\r" + prefix + " " + countdown + "   ")
         sys.stdout.flush()
         time.sleep(1)
