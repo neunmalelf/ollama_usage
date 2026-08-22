@@ -125,7 +125,52 @@ class TestMiniSegments:
         text = "".join(t for t, _ in segs)
         assert text.endswith("wr: 0")
 
-    def test_countdown_compact_format(self) -> None:
-        segs = w._mini_countdown_segments(90061, w.THEMES["minimal"])
+class TestCountdownSegments:
+
+    def test_no_seconds_shown(self) -> None:
+        segs = w._countdown_segments(90061, w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text == "1d 01:01"
+        assert "s" not in text
+        assert text == "1d 1h 01m"
+
+    def test_under_a_minute_shows_zero_minutes(self) -> None:
+        segs = w._countdown_segments(30, w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert text == "00m"
+
+
+class TestDrawFullWebSearch:
+
+    def test_web_search_requests_label_and_value_color(self) -> None:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._canvas = MagicMock()
+        inst._canvas.bbox.return_value = (0, 0, 10, 10)
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "full"
+        inst._data = {
+            "plan": "pro",
+            "session": {"used_pct": 2.6, "resets_at": "2026-04-04T17:00:00Z"},
+            "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
+            "web_search_requests": 7,
+        }
+        inst._error = None
+        inst._draw_full()
+        texts = []
+        for call in inst._canvas.create_text.call_args_list:
+            args, kwargs = call
+            if kwargs.get("text") is not None:
+                texts.append(kwargs["text"])
+            elif len(args) > 1:
+                texts.append(args[1])
+        joined = "".join(texts)
+        assert "Web search requests: " in joined
+        assert "7" in joined
+        # The number uses the value color.
+        value_color = w.THEMES["minimal"][w._VALUE_COLOR]
+        value_fills = [
+            kwargs.get("fill")
+            for call in inst._canvas.create_text.call_args_list
+            for _args, kwargs in [call]
+            if kwargs.get("text") == "7"
+        ]
+        assert value_fills and value_fills[0] == value_color

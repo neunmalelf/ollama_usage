@@ -132,14 +132,14 @@ def _fmt_countdown(seconds: int) -> str:
 def _countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]:
     """Return the countdown as colored ``(text, color)`` segments.
 
-    Hours, minutes and seconds numbers use the named time colors; the unit
-    letters use the label color. Days are shown when present.
+    Days, hours and minutes numbers use the named time colors; the unit
+    letters use the label color. Seconds are not shown for resets.
     """
     if seconds <= 0:
         return [("now", theme["sub"])]
     d, rem = divmod(seconds, 86400)
     h, rem = divmod(rem, 3600)
-    m, s   = divmod(rem, 60)
+    m, _   = divmod(rem, 60)
     segs: list[tuple[str, str]] = []
     if d:
         segs.append((f"{d}d", theme[_DAYS_COLOR]))
@@ -147,11 +147,8 @@ def _countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]:
     if d or h:
         segs.append((f"{h}h", theme[_HOURS_COLOR]))
         segs.append((" ", theme["sub"]))
-    if m:
+    if m or not (d or h):
         segs.append((f"{m:02d}m", theme[_MINUTES_COLOR]))
-        segs.append((" ", theme["sub"]))
-    if s or not (d or h or m):
-        segs.append((f"{s:02d}s", theme[_SECONDS_COLOR]))
     return segs
 
 
@@ -569,8 +566,11 @@ class OllamaWidget:
 
         ws = self._data.get("web_search_requests")
         if ws is not None:
-            c.create_text(bar_x, y, text=f"Web search: {ws} request{'s' if ws != 1 else ''}",
-                          anchor="nw", fill=t["sub"], font=(_FONT, 8))
+            self._draw_segments(
+                c, bar_x, y,
+                [("Web search requests: ", t["sub"]), (str(ws), t[_VALUE_COLOR])],
+                (_FONT, 8),
+            )
 
     # ---------------------------------------------------------------- run
 
