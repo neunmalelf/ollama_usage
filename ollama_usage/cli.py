@@ -404,7 +404,7 @@ def _autorefresh_sleep_mini(interval: int, prefix: str) -> None:
 
 
 def _autorefresh_sleep_horizontal(interval: int, block: str) -> None:
-    """Sleep for ``interval`` seconds, redrawing a multi-line ``block`` with a decorator ``(mm:ss)`` countdown appended."""
+    """Sleep for ``interval`` seconds, redrawing ``block`` with a decorator ``(mm:ss)`` countdown on the ``wr:`` line."""
     if not sys.stdout.isatty():
         time.sleep(interval)
         return
@@ -413,7 +413,7 @@ def _autorefresh_sleep_horizontal(interval: int, block: str) -> None:
         countdown = _format_countdown(remaining)
         if use_color:
             countdown = f"{_ANSI[decorator_color]}{countdown}{_ANSI['reset']}"
-        sys.stdout.write("\033[2J\033[H" + block + "\n" + countdown + "   ")
+        sys.stdout.write("\033[2J\033[H" + block + "  " + countdown + "   ")
         sys.stdout.flush()
         time.sleep(1)
     sys.stdout.write("\033[2J\033[H")

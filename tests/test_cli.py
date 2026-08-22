@@ -523,8 +523,9 @@ class TestAutorefreshSleepHorizontal:
             _autorefresh_sleep_horizontal(2, block)
         out = capsys.readouterr().out
         assert block in out
-        assert "(2)" in out
-        assert "(1)" in out
+        # Countdown sits on the same line as wr:, separated by two spaces.
+        assert "wr: 2  (2)" in out
+        assert "wr: 2  (1)" in out
 
     def test_countdown_is_decorator_when_colored(self, capsys) -> None:
         from ollama_usage.cli import _ANSI

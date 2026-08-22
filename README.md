@@ -126,7 +126,7 @@ w:   1.9% (1d 06:46)
 wr:  2
 ```
 
-It clears the terminal before showing the output (TTY only) and supports `--autorefresh` the same way, redrawing the block with the countdown below it.
+It clears the terminal before showing the output (TTY only) and supports `--autorefresh` the same way, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
 
 The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `Models used this week:` section lists per-model request counts. Both only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 
