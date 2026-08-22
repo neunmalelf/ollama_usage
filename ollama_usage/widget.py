@@ -539,10 +539,11 @@ class OllamaWidget:
             pct_color = t[_SESSION_PCT_COLOR] if label == "Session" else bar_color
             secs      = _seconds_until(iso)
 
-            # Label + percentage (the % uses the label color)
+            # Label + percentage (the % uses the label color, with a space
+            # before it so the number does not overwrite the %)
             c.create_text(bar_x,      y, text=label,       anchor="nw",
                           fill=t["fg"], font=(_FONT, 9, "bold"))
-            pct_id = c.create_text(bar_x + bw, y, text="%", anchor="ne",
+            pct_id = c.create_text(bar_x + bw, y, text=" %", anchor="ne",
                                    fill=t[_LABEL_COLOR], font=(_FONT, 9, "bold"))
             _, _, pct_x1, _ = c.bbox(pct_id)
             c.create_text(pct_x1, y, text=f"{pct:.1f}", anchor="ne",
