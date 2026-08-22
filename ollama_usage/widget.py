@@ -145,13 +145,16 @@ def _countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]:
     m, _   = divmod(rem, 60)
     segs: list[tuple[str, str]] = []
     if d:
-        segs.append((f"{d}d", theme[_DAYS_COLOR]))
+        segs.append((f"{d}", theme[_DAYS_COLOR]))
+        segs.append(("d", theme["sub"]))
         segs.append((" ", theme["sub"]))
     if d or h:
-        segs.append((f"{h}h", theme[_HOURS_COLOR]))
+        segs.append((f"{h:02d}", theme[_HOURS_COLOR]))
+        segs.append(("h", theme["sub"]))
         segs.append((" ", theme["sub"]))
     if m or not (d or h):
-        segs.append((f"{m:02d}m", theme[_MINUTES_COLOR]))
+        segs.append((f"{m:02d}", theme[_MINUTES_COLOR]))
+        segs.append(("m", theme["sub"]))
     return segs
 
 
@@ -169,7 +172,8 @@ def _mini_countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]
     m, _   = divmod(rem, 60)
     segs: list[tuple[str, str]] = []
     if d:
-        segs.append((f"{d}d", theme[_DAYS_COLOR]))
+        segs.append((f"{d}", theme[_DAYS_COLOR]))
+        segs.append(("d", theme["sub"]))
         segs.append((" ", theme["sub"]))
     segs.append((f"{h:02d}", theme[_HOURS_COLOR]))
     segs.append((":", theme["sub"]))

@@ -146,7 +146,7 @@ class TestCountdownSegments:
         segs = w._countdown_segments(90061, w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
         assert "s" not in text
-        assert text == "1d 1h 01m"
+        assert text == "1d 01h 01m"
 
     def test_under_a_minute_shows_zero_minutes(self) -> None:
         segs = w._countdown_segments(30, w.THEMES["minimal"])
