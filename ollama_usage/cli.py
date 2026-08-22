@@ -6,7 +6,6 @@ import platform
 import sys
 import time
 from datetime import datetime, timedelta, timezone
-from importlib.metadata import version as get_version
 from typing import Optional
 
 from ollama_usage import __version__ as _pkg_version
@@ -86,12 +85,13 @@ def _enable_windows_vt() -> None:
 
 
 def _get_version() -> str:
-    """Get package version, with fallback for frozen executables."""
-    try:
-        return get_version("ollama-usage")
-    except Exception:
-        # Fallback for frozen executables where package metadata is unavailable
-        return _pkg_version
+    """Get package version from the source ``__version__``.
+
+    Prefer the source version over installed package metadata, which can be
+    stale (e.g. an old ``pip install``). ``_pkg_version`` is baked in for
+    frozen executables too.
+    """
+    return _pkg_version
 
 
 def _sanitize_cookie(value: str) -> str:
