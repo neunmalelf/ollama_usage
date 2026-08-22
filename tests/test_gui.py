@@ -321,7 +321,9 @@ class TestOllamaGui:
         with patch("ollama_usage.gui.sys.exit") as mock_exit:
             gui._quit()
         fake_root.destroy.assert_called_once()
-        mock_exit.assert_called_once_with(0)
+        # _quit destroys the root and lets the mainloop exit naturally; it
+        # must not call sys.exit (which raised a Tcl error from the menu).
+        mock_exit.assert_not_called()
 
     def test_refresh_button_triggers_fetch(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
