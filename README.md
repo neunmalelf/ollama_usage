@@ -247,7 +247,7 @@ launch_gui(cookie=get_cookie_auto)
 - **Right-click** opens a context menu: refresh now, toggle size, or close.
 - **Auto-refreshes** every 30 seconds.
 - Remembers its last position between runs (unless `--position` is given).
-- An **A** indicator in the top-right corner shows the autorefresh status: **green** when the data is fresh, **red** when an error occurred (e.g. auth failure).
+- An **M** indicator in the top-right corner shows the autorefresh status: **green** when the data is fresh, **red** when an error occurred (e.g. auth failure).
 
 ### Options
 
