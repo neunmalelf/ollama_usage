@@ -103,6 +103,7 @@ def _make_data(**overrides) -> dict:
         "session": {"used_pct": 2.6, "resets_at": "2026-04-04T17:00:00Z"},
         "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
         "web_search_requests": 2,
+        "web_fetch_requests": 0,
     }
     data.update(overrides)
     return data
@@ -113,7 +114,7 @@ class TestMiniSegments:
     def test_layout_matches_minidisplay(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text == "olu (pro) s: 2.6% (00:00) | w: 1.9% (00:00) wr: 2"
+        assert text == "olu (pro) s: 2.6% (00:00) | w: 1.9% (00:00) ws: 2 wr: 0"
 
     def test_plan_is_orange(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
@@ -133,7 +134,12 @@ class TestMiniSegments:
     def test_web_search_absent_shows_zero(self) -> None:
         segs = w._mini_segments(_make_data(web_search_requests=None), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text.endswith("wr: 0")
+        assert text.endswith(" ws: 0 wr: 0")
+
+    def test_web_fetch_shown_when_present(self) -> None:
+        segs = w._mini_segments(_make_data(web_fetch_requests=5), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert text.endswith(" wr: 5")
 
     def test_countdown_compact_format(self) -> None:
         segs = w._mini_countdown_segments(90061, w.THEMES["minimal"])
@@ -187,5 +193,37 @@ class TestDrawFullWebSearch:
             for call in inst._canvas.create_text.call_args_list
             for _args, kwargs in [call]
             if kwargs.get("text") == "7"
+        ]
+        assert value_fills and value_fills[0] == value_color
+    def test_web_fetch_requests_label_and_value_color(self) -> None:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._canvas = MagicMock()
+        inst._canvas.bbox.return_value = (0, 0, 10, 10)
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "full"
+        inst._data = {
+            "plan": "pro",
+            "session": {"used_pct": 2.6, "resets_at": "2026-04-04T17:00:00Z"},
+            "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
+            "web_fetch_requests": 4,
+        }
+        inst._error = None
+        inst._draw_full()
+        texts = []
+        for call in inst._canvas.create_text.call_args_list:
+            args, kwargs = call
+            if kwargs.get("text") is not None:
+                texts.append(kwargs["text"])
+            elif len(args) > 1:
+                texts.append(args[1])
+        joined = "".join(texts)
+        assert "Web fetch requests: " in joined
+        assert "4" in joined
+        value_color = w.THEMES["minimal"][w._VALUE_COLOR]
+        value_fills = [
+            kwargs.get("fill")
+            for call in inst._canvas.create_text.call_args_list
+            for _args, kwargs in [call]
+            if kwargs.get("text") == "4"
         ]
         assert value_fills and value_fills[0] == value_color

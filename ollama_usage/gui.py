@@ -128,11 +128,17 @@ def build_lines(data: dict | None, error: str | None = None) -> list[str]:
     if web_search is not None:
         lines.append(f"WebSearch: {web_search} request{'s' if web_search != 1 else ''}")
 
+    web_fetch = data.get("web_fetch_requests")
+    if web_fetch is not None:
+        lines.append(f"WebFetch : {web_fetch} request{'s' if web_fetch != 1 else ''}")
+
     models = data.get("models")
     if models:
         lines.append("Model calls this week:")
         for item in models:
             lines.append(f"          {item['requests']} {item['name']}")
+
+    return lines
 
     return lines
 
@@ -285,6 +291,16 @@ def build_segments(
                 ("WebSearch: ", None),
                 (f"{web_search}", _VALUE_COLOR),
                 (f" request{'s' if web_search != 1 else ''}", None),
+            ]
+        )
+
+    web_fetch = data.get("web_fetch_requests")
+    if web_fetch is not None:
+        lines.append(
+            [
+                ("WebFetch : ", None),
+                (f"{web_fetch}", _VALUE_COLOR),
+                (f" request{'s' if web_fetch != 1 else ''}", None),
             ]
         )
 

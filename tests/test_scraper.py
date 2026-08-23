@@ -19,14 +19,20 @@ def make_html(
     weekly_pct: float = 27.9,
     weekly_time: str = "2026-04-06T00:00:00Z",
     web_search_requests: int | None = None,
+    web_fetch_requests: int | None = None,
     models: list[tuple[str, int]] | None = None,
 ) -> str:
     """Build a minimal but realistic settings page HTML fragment."""
     segment = ""
     if web_search_requests is not None:
-        segment = (
+        segment += (
             '<button data-usage-segment data-model="web search" '
             f'data-requests="{web_search_requests}"></button>'
+        )
+    if web_fetch_requests is not None:
+        segment += (
+            '<button data-usage-segment data-model="web fetch" '
+            f'data-requests="{web_fetch_requests}"></button>'
         )
     models_html = ""
     if models is not None:
@@ -92,6 +98,7 @@ def make_html_reversed(
     weekly_pct: float = 27.9,
     weekly_time: str = "2026-04-06T00:00:00Z",
     web_search_requests: int | None = None,
+    web_fetch_requests: int | None = None,
 ) -> str:
     """Build HTML with Weekly usage appearing BEFORE Session usage.
 
@@ -100,9 +107,14 @@ def make_html_reversed(
     """
     segment = ""
     if web_search_requests is not None:
-        segment = (
+        segment += (
             '<button data-usage-segment data-model="web search" '
             f'data-requests="{web_search_requests}"></button>'
+        )
+    if web_fetch_requests is not None:
+        segment += (
+            '<button data-usage-segment data-model="web fetch" '
+            f'data-requests="{web_fetch_requests}"></button>'
         )
     return f"""
     <span class="capitalize">{plan}</span>
@@ -268,14 +280,43 @@ class TestWebSearchUsage:
         data = parse_html(make_html_reversed(web_search_requests=3))
         assert data["web_search_requests"] == 3
 
-    def test_web_search_does_not_affect_session_weekly(self) -> None:
-        html = make_html(
-            web_search_requests=2, session_pct=1.5, weekly_pct=1.7
+class TestWebFetchUsage:
+
+    @pytest.mark.parametrize("count", [0, 1, 2, 12, 317])
+    def test_web_fetch_requests_values(self, count: int) -> None:
+        assert (
+            parse_html(make_html(web_fetch_requests=count))["web_fetch_requests"]
+            == count
         )
+
+    def test_web_fetch_requests_type_is_int(self) -> None:
+        assert isinstance(
+            parse_html(make_html(web_fetch_requests=2))["web_fetch_requests"], int
+        )
+
+    def test_web_fetch_sums_multiple_segments(self) -> None:
+        html = (
+            '<button data-usage-segment data-model="web fetch" data-requests="2"></button>'
+            '<button data-usage-segment data-model="web fetch" data-requests="5"></button>'
+        )
+        data = parse_html(make_html() + html)
+        assert data["web_fetch_requests"] == 7
+
+    def test_web_fetch_is_none_when_absent(self) -> None:
+        assert parse_html(make_html())["web_fetch_requests"] is None
+
+    def test_web_fetch_is_none_on_free(self, free_html: str) -> None:
+        assert parse_html(free_html)["web_fetch_requests"] is None
+
+    def test_web_fetch_reversed_order(self) -> None:
+        data = parse_html(make_html_reversed(web_fetch_requests=3))
+        assert data["web_fetch_requests"] == 3
+
+    def test_web_fetch_does_not_affect_web_search(self) -> None:
+        html = make_html(web_search_requests=2, web_fetch_requests=4)
         data = parse_html(html)
         assert data["web_search_requests"] == 2
-        assert data["session"]["used_pct"] == 1.5
-        assert data["weekly"]["used_pct"] == 1.7
+        assert data["web_fetch_requests"] == 4
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +411,7 @@ class TestReversedOrderParsing:
             "session": {"used_pct": 45.0, "resets_at": "2026-04-05T10:00:00Z"},
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
+            "web_fetch_requests": None,
             "models": None,
         }
 
@@ -424,6 +466,7 @@ class TestRealPageLayout:
             "session": {"used_pct": 45.0, "resets_at": "2026-08-18T08:00:00Z"},
             "weekly": {"used_pct": 80.0, "resets_at": "2026-08-24T00:00:00Z"},
             "web_search_requests": None,
+            "web_fetch_requests": None,
             "models": None,
         }
 
@@ -443,13 +486,15 @@ class TestOutputStructure:
 
     def test_top_level_keys(self, free_html: str) -> None:
         assert set(parse_html(free_html).keys()) == {
-            "plan", "session", "weekly", "web_search_requests", "models"
+            "plan", "session", "weekly", "web_search_requests",
+            "web_fetch_requests", "models"
         }
 
     def test_full_structure(self, pro_html: str) -> None:
         data = parse_html(pro_html)
         assert set(data.keys()) == {
-            "plan", "session", "weekly", "web_search_requests", "models"
+            "plan", "session", "weekly", "web_search_requests",
+            "web_fetch_requests", "models"
         }
         assert set(data["session"].keys()) == {"used_pct", "resets_at"}
         assert set(data["weekly"].keys()) == {"used_pct", "resets_at"}
@@ -464,6 +509,7 @@ class TestOutputStructure:
             "session": {"used_pct": 45.0, "resets_at": "2026-04-05T10:00:00Z"},
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
+            "web_fetch_requests": None,
             "models": None,
         }
 

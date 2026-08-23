@@ -33,6 +33,7 @@ def make_data(
     session_pct: float = 2.6,
     weekly_pct: float = 1.9,
     web_search_requests: int | None = None,
+    web_fetch_requests: int | None = None,
     models: list | None = None,
 ) -> dict:
     return {
@@ -40,6 +41,7 @@ def make_data(
         "session": {"used_pct": session_pct, "resets_at": "2026-08-05T20:00:00Z"},
         "weekly": {"used_pct": weekly_pct, "resets_at": "2099-01-01T00:00:00Z"},
         "web_search_requests": web_search_requests,
+        "web_fetch_requests": web_fetch_requests,
         "models": models,
     }
 
@@ -76,6 +78,13 @@ class TestBuildLines:
     def test_web_search_shown_when_present(self) -> None:
         lines = build_lines(make_data(web_search_requests=2))
         assert any("WebSearch" in line and "2" in line for line in lines)
+    def test_web_fetch_omitted_when_absent(self) -> None:
+        lines = build_lines(make_data())
+        assert not any("WebFetch" in line for line in lines)
+
+    def test_web_fetch_shown_when_present(self) -> None:
+        lines = build_lines(make_data(web_fetch_requests=3))
+        assert any("WebFetch" in line and "3" in line for line in lines)
 
     def test_models_shown_when_present(self) -> None:
         models = [{"name": "glm-5.2", "requests": 2}]
@@ -157,6 +166,10 @@ class TestBuildSegments:
         segs = build_segments(make_data(web_search_requests=2))
         ws_line = next(l for l in segs if "WebSearch" in _seg_text(l))
         assert _seg_color(ws_line, "2") == "cyan"
+    def test_web_fetch_count_is_cyan(self) -> None:
+        segs = build_segments(make_data(web_fetch_requests=3))
+        wr_line = next(l for l in segs if "WebFetch" in _seg_text(l))
+        assert _seg_color(wr_line, "3") == "cyan"
 
     def test_model_header_is_grey(self) -> None:
         models = [{"name": "glm-5.2", "requests": 2}]
