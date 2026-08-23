@@ -99,7 +99,7 @@ ollama-usage --help
 
 ### Example output
 ```
-Plan     :  pro
+Plan     :  Pro
 Session  :   2.6% used - reset at 2026-08-05T20:00:00Z (in  2h 42m)
 Weekly   :   1.9% used - reset at 2026-08-10T00:00:00Z (in  4d 6h 42m)
 WebSearch:      2 requests
@@ -113,7 +113,7 @@ Model calls this week:
 
 ### Minidisplay output
 ```
-olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) ws: 2 wr: 0
+olu (Pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) ws: 2 wr: 0
 ```
 
 `--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line. When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
@@ -121,7 +121,7 @@ olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) ws: 2 wr: 0
 `--minidisplay-horizontal` shows the same information, but each item on its own line:
 
 ```
-olu (pro)
+olu (Pro)
 s:   2.6% (02:46)
 w:   1.9% (1d 06:46)
 ws:  2

@@ -19,7 +19,7 @@ from typing import Callable
 from ollama_usage import __version__ as _pkg_version
 from ollama_usage.cli import _next_refresh_timestamp
 from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError
-from ollama_usage.scraper import get_usage
+from ollama_usage.scraper import get_usage, plan_display_name
 
 
 def _gui_refresh_timestamp(seconds_from_now: int) -> str:
@@ -103,7 +103,7 @@ def build_lines(data: dict | None, error: str | None = None) -> list[str]:
         return ["Loading…"]
 
     lines: list[str] = []
-    plan = data.get("plan", "—")
+    plan = plan_display_name(data.get("plan", "")) if data.get("plan") else "—"
     lines.append(f"Plan     : {plan}")
 
     session = data.get("session") or {}
@@ -248,7 +248,7 @@ def build_segments(
         return [[("Loading…", None)]]
 
     lines: list[list[tuple[str, str | None]]] = []
-    plan = data.get("plan", "—")
+    plan = plan_display_name(data.get("plan", "")) if data.get("plan") else "—"
     lines.append([("Plan     : ", None), (plan, _PLAN_COLOR)])
 
     session = data.get("session") or {}

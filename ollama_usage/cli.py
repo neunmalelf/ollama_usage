@@ -24,7 +24,7 @@ from ollama_usage.exceptions import (
     OllamaUsageError,
 )
 from ollama_usage.notify import NotifyState, check_and_notify, notify_available
-from ollama_usage.scraper import get_usage
+from ollama_usage.scraper import get_usage, plan_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,7 @@ def _format_countdown(seconds: int) -> str:
 
 def _mini_line(data: dict, use_color: bool) -> str:
     """Build the single-line minidisplay string (no trailing newline)."""
-    plan = data["plan"]
+    plan = plan_display_name(data["plan"])
     if use_color:
         plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
     session_pct = _color_pct(data["session"]["used_pct"], use_color)
@@ -199,7 +199,7 @@ def _mini_line(data: dict, use_color: bool) -> str:
 
 def _mini_horizontal(data: dict, use_color: bool) -> str:
     """Build the multi-line minidisplay (each info item on its own line)."""
-    plan = data["plan"]
+    plan = plan_display_name(data["plan"])
     if use_color:
         plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
     session_pct = _color_pct(data["session"]["used_pct"], use_color)
@@ -253,7 +253,7 @@ def display(
         print(_mini_display(data, _use_color(), minidisplay_horizontal))
     else:
         use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
-        plan = data['plan']
+        plan = plan_display_name(data['plan'])
         if use_color:
             plan = f"{_ANSI[_PLAN_COLOR]}{plan}{_ANSI['reset']}"
         print("")
@@ -456,8 +456,8 @@ def main():
         "--minidisplay",
         action="store_true",
         help="Single-line compact output, e.g.:\n"
-        "  olu (pro) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) ws: 2 wr: 0\n"
-        "  olu = ollama usage, (pro) = your plan name\n"
+        "  olu (Pro) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) ws: 2 wr: 0\n"
+        "  olu = ollama usage, (Pro) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
         "  ws = web search requests this session\n"
         "  wr = web fetch requests this session\n"
@@ -468,7 +468,7 @@ def main():
         "--minidisplay-horizontal",
         action="store_true",
         help="Multi-line compact output, each info on its own line, e.g.:\n"
-        "  olu (pro)\n"
+        "  olu (Pro)\n"
         "  s:  42.0%% (02:46)\n"
         "  w:  77.0%% (1d 06:46)\n"
         "  ws: 2\n"
