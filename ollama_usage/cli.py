@@ -656,6 +656,7 @@ def main():
                         _autorefresh_sleep(auto_interval)
             except KeyboardInterrupt:
                 print("\nStopped.")
+                return
 
         data = get_usage(cookie)
         display(

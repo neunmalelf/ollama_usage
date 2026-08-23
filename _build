@@ -191,9 +191,9 @@ if [ -f "${FINAL}" ]; then
     echo "[_build] self-contained - the end user needs no Python/pip"
     echo "[_build] testing binary..."
     "${FINAL}" --version
-    # copy the *.exe to the Python Scripts dir, overwriting if present
-    echo "[_build] copying ${FINAL} to /c/Users/fmann/scoop/apps/python/current/Scripts/"
-    cp "${FINAL}" /c/Users/fmann/scoop/apps/python/current/Scripts/ 2>/dev/null || true
+    # also install to the platform bin dir, overwriting if present
+    echo "[_build] copying ${FINAL} to /b/winsbin/"
+    cp "${FINAL}" /b/winsbin/ 2>/dev/null || echo "[_build] WARNING: copy ${FINAL} to /b/winsbin/ failed" >&2
 else
     echo "[_build] ERROR: build failed - no output found at ${FINAL}" >&2
     exit 1
