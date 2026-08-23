@@ -57,13 +57,13 @@ class TestBuildLines:
 
     def test_plan_is_shown(self) -> None:
         lines = build_lines(make_data(plan="free"))
-        assert any("free" in line for line in lines)
+        assert any("Free" in line for line in lines)
 
     def test_plan_has_single_space_prefix(self) -> None:
         lines = build_lines(make_data(plan="pro"))
         plan_line = next(line for line in lines if "Plan" in line)
-        # "Plan     : pro" Ã¢â‚¬â€ one space after the colon, not two.
-        assert plan_line == "Plan     : pro"
+        # "Plan     : Pro" — one space after the colon, not two.
+        assert plan_line == "Plan     : Pro"
 
     def test_session_and_weekly_percentages(self) -> None:
         lines = build_lines(make_data(session_pct=2.6, weekly_pct=1.9))
@@ -127,12 +127,12 @@ class TestBuildSegments:
     def test_plan_is_orange(self) -> None:
         segs = build_segments(make_data(plan="pro"))
         plan_line = next(l for l in segs if "Plan" in _seg_text(l))
-        assert _seg_color(plan_line, "pro") == "orange"
+        assert _seg_color(plan_line, "Pro") == "orange"
 
     def test_plan_has_single_space_prefix(self) -> None:
         segs = build_segments(make_data(plan="pro"))
         plan_line = next(l for l in segs if "Plan" in _seg_text(l))
-        assert _seg_text(plan_line) == "Plan     : pro"
+        assert _seg_text(plan_line) == "Plan     : Pro"
 
     def test_low_percentage_is_green(self) -> None:
         segs = build_segments(make_data(session_pct=2.6))
