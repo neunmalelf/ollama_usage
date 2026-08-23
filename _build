@@ -12,7 +12,7 @@
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20260822221312"
+__VERSION__="1.0.20260823090603"
 
 set -e
 

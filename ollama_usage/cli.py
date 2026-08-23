@@ -505,7 +505,12 @@ def main():
     parser.add_argument(
         "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
     )
-    parser.add_argument("--theme", default="dark", choices=["dark", "light", "minimal"])
+    parser.add_argument(
+        "--theme",
+        default="dark",
+        choices=["dark", "light", "minimal"],
+        help="Defines the color scheme used together with --widget",
+    )
     parser.add_argument(
         "--size", default=None, choices=["compact", "full"],
         help="Widget size (default: restore last used size)",
