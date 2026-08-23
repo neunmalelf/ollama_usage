@@ -278,6 +278,7 @@ class OllamaWidget:
         size: str | None = None,
         opacity: float  = 0.92,
         position: str | None = None,
+        autorefresh: bool = False,
     ) -> None:
         self._cookie_fn   = cookie if callable(cookie) else lambda: cookie
         self._cookie      = self._cookie_fn()
@@ -286,6 +287,7 @@ class OllamaWidget:
         self._size        = self._resolve_size(size)  # "compact" | "full"
         self._opacity     = max(0.1, min(1.0, opacity))
         self._position    = position   # named anchor or None (restored)
+        self._autorefresh = autorefresh  # True → "A" indicator, False → "M"
         self._data: dict | None  = None
         self._error: str | None  = None
         self._after_id: str | None = None
@@ -478,6 +480,9 @@ class OllamaWidget:
             self._draw_compact()
         else:
             self._draw_full()
+    def _indicator_letter(self) -> str:
+        """Return the top-right status letter: "A" when autorefreshing, "M" otherwise."""
+        return "A" if self._autorefresh else "M"
 
     def _draw_segments(
         self, c: tk.Canvas, x: int, y: int,
@@ -502,9 +507,10 @@ class OllamaWidget:
                           font=(_FONT, 9))
             return
 
-        # Autorefresh indicator (M) — green when data is fresh, red on error.
+        # Status indicator (A with --autorefresh, M otherwise) — green when
+        # data is fresh, red on error.
         dot = t["green"] if self._data and not self._error else t["red"]
-        c.create_text(w - p, p, text="M", anchor="ne",
+        c.create_text(w - p, p, text=self._indicator_letter(), anchor="ne",
                       fill=dot, font=(_FONT, 8))
 
         # Minidisplay line (same layout as --minidisplay, no bars)
@@ -525,9 +531,10 @@ class OllamaWidget:
         _, _, prefix_x2, _ = c.bbox(prefix_id)
         c.create_text(prefix_x2, p, text=plan, anchor="nw",
                       fill=t[_PLAN_COLOR], font=(_FONT, 8))
-        # Autorefresh indicator (M) — green when data is fresh, red on error.
+        # Status indicator (A with --autorefresh, M otherwise) — green when
+        # data is fresh, red on error.
         dot = t["green"] if self._data and not self._error else t["red"]
-        c.create_text(w - p, p, text="M", anchor="ne",
+        c.create_text(w - p, p, text=self._indicator_letter(), anchor="ne",
                       fill=dot, font=(_FONT, 8))
 
         if self._error or not self._data:
@@ -611,18 +618,21 @@ def launch_widget(
     size: str            = "full",
     opacity: float       = 0.92,
     position: str | None = None,
+    autorefresh: bool    = False,
 ) -> None:
     """
     Launch the always-on-top Ollama quota widget.
 
     Args:
-        cookie:   __Secure-session cookie value or callable to fetch/refresh it.
-        interval: Refresh interval in seconds (min 10).
-        theme:    "dark" | "light" | "minimal".
-        size:     "full" (bars + countdown) | "compact" (text only).
-        opacity:  Window opacity between 0.1 and 1.0.
-        position: "top-left" | "top-right" | "bottom-left" | "bottom-right"
-                  or None to restore last saved position.
+        cookie:     __Secure-session cookie value or callable to fetch/refresh it.
+        interval:   Refresh interval in seconds (min 10).
+        theme:      "dark" | "light" | "minimal".
+        size:       "full" (bars + countdown) | "compact" (text only).
+        opacity:    Window opacity between 0.1 and 1.0.
+        position:   "top-left" | "top-right" | "bottom-left" | "bottom-right"
+                    or None to restore last saved position.
+        autorefresh: Whether to show the "A" (autorefresh) indicator; the
+                    "M" (manual) indicator is shown when False.
     """
     check_dependencies()
     try:
@@ -640,4 +650,5 @@ def launch_widget(
         size=size,
         opacity=opacity,
         position=position,
+        autorefresh=autorefresh,
     ).run()

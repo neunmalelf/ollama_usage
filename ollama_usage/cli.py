@@ -516,7 +516,7 @@ def main():
     parser.add_argument(
         "--widget",
         action="store_true",
-        help="Launch desktop widget (M indicator: green=fresh, red=error)",
+        help="Launch desktop widget (A with --autorefresh, M otherwise; green=fresh, red=error)",
     )
     parser.add_argument(
         "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
@@ -591,6 +591,7 @@ def main():
                 size=args.size,
                 opacity=args.opacity,
                 position=args.position,
+                autorefresh=args.autorefresh is not None,
             )
             return
 

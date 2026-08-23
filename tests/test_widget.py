@@ -180,6 +180,7 @@ class TestDrawFullWebSearch:
             "web_search_requests": 7,
         }
         inst._error = None
+        inst._autorefresh = False
         inst._draw_full()
         texts = []
         for call in inst._canvas.create_text.call_args_list:
@@ -213,6 +214,7 @@ class TestDrawFullWebSearch:
             "web_fetch_requests": 4,
         }
         inst._error = None
+        inst._autorefresh = False
         inst._draw_full()
         texts = []
         for call in inst._canvas.create_text.call_args_list:
@@ -232,3 +234,55 @@ class TestDrawFullWebSearch:
             if kwargs.get("text") == "4"
         ]
         assert value_fills and value_fills[0] == value_color
+
+class TestStatusIndicator:
+
+    def _draw_texts(self, autorefresh: bool) -> str:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._canvas = MagicMock()
+        inst._canvas.bbox.return_value = (0, 0, 10, 10)
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "full"
+        inst._data = {
+            "plan": "pro",
+            "session": {"used_pct": 2.6, "resets_at": "2026-04-04T17:00:00Z"},
+            "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
+            "web_search_requests": 7,
+            "web_fetch_requests": 4,
+        }
+        inst._error = None
+        inst._autorefresh = autorefresh
+        inst._draw_full()
+        return "".join(
+            k.get("text") or ""
+            for a, k in inst._canvas.create_text.call_args_list
+        )
+
+    def test_indicator_A_when_autorefresh(self) -> None:
+        assert "A" in self._draw_texts(True)
+
+    def test_indicator_M_when_manual(self) -> None:
+        assert "M" in self._draw_texts(False)
+
+    def test_compact_uses_indicator_letter(self) -> None:
+        for autorefresh, expected in [(True, "A"), (False, "M")]:
+            inst = w.OllamaWidget.__new__(w.OllamaWidget)
+            inst._canvas = MagicMock()
+            inst._canvas.bbox.return_value = (0, 0, 10, 10)
+            inst._theme = w.THEMES["minimal"]
+            inst._size = "compact"
+            inst._data = {
+                "plan": "pro",
+                "session": {"used_pct": 2.6, "resets_at": "2026-04-04T17:00:00Z"},
+                "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
+                "web_search_requests": 2,
+                "web_fetch_requests": 5,
+            }
+            inst._error = None
+            inst._autorefresh = autorefresh
+            inst._draw_compact()
+            texts = "".join(
+                k.get("text") or ""
+                for a, k in inst._canvas.create_text.call_args_list
+            )
+            assert expected in texts

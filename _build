@@ -58,6 +58,31 @@ ENTRY_POINT="ollama_usage/cli.py"
 OUTPUT_NAME="ollama-usage.exe"
 OUTPUT_DIR="dist"
 ICON="icon.ico"
+# --- install the built binary to the platform bin dir -------------------------
+# Windows/MSYS2/MINGW/CYGWIN -> /b/winsbin ; Linux/macOS -> /usr/local/bin
+install_binaries() {
+    local dest=""
+    case "$(uname -s)" in
+        MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
+            dest="/b/winsbin"
+            ;;
+        Linux)
+            dest="/usr/local/bin"
+            ;;
+        Darwin)
+            dest="/usr/local/bin"
+            ;;
+        *)
+            echo "[_build] WARNING: unknown OS '$(uname -s)' - skipping install to bin dir" >&2
+            return
+            ;;
+    esac
+    mkdir -p "$dest" 2>/dev/null || true
+    echo "[_build] installing ${FINAL} -> $dest/"
+    cp -f "${FINAL}" "$dest/" \
+        && echo "[_build] installed to $dest/" \
+        || echo "[_build] WARNING: copy ${FINAL} to $dest/ failed" >&2
+}
 
 # --- get version from the source __version__ ---------------------------------
 VERSION=$(python -c "from ollama_usage import __version__; print(__version__)" 2>/dev/null || echo "0.0.0")
@@ -191,9 +216,7 @@ if [ -f "${FINAL}" ]; then
     echo "[_build] self-contained - the end user needs no Python/pip"
     echo "[_build] testing binary..."
     "${FINAL}" --version
-    # also install to the platform bin dir, overwriting if present
-    echo "[_build] copying ${FINAL} to /b/winsbin/"
-    cp "${FINAL}" /b/winsbin/ 2>/dev/null || echo "[_build] WARNING: copy ${FINAL} to /b/winsbin/ failed" >&2
+    install_binaries
 else
     echo "[_build] ERROR: build failed - no output found at ${FINAL}" >&2
     exit 1
