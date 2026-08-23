@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from typing import Callable
 from ollama_usage.exceptions import NetworkError, OllamaUsageError, AuthError
-from ollama_usage.scraper import get_usage
+from ollama_usage.scraper import get_usage, plan_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +92,8 @@ POSITIONS = {
 }
 
 # Widget dimensions
-_W_COMPACT = (320, 30)
-_W_FULL    = (240, 172)
+_W_COMPACT = (400, 30)
+_W_FULL    = (240, 186)
 _BAR_W     = 200
 _BAR_H     = 8
 _PAD       = 14
@@ -186,7 +186,7 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
 
     ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) ws: <count> wr: <count>``
     """
-    plan = data.get("plan", "—")
+    plan = plan_display_name(data.get("plan", "")) if data.get("plan") else "—"
     session = data.get("session") or {}
     weekly = data.get("weekly") or {}
     web_search = data.get("web_search_requests")
@@ -493,7 +493,7 @@ class OllamaWidget:
     def _draw_compact(self) -> None:
         c, t   = self._canvas, self._theme
         w, h   = _W_COMPACT
-        p      = 6  # tighter padding for the compact view
+        p      = 10  # padding for the compact view (room before the "A" indicator)
 
         if self._error or not self._data:
             msg = self._error or "Loading…"
@@ -519,7 +519,7 @@ class OllamaWidget:
         bar_x  = (w - bw) // 2
 
         # Header
-        plan = self._data["plan"].capitalize() if self._data else "—"
+        plan = plan_display_name(self._data["plan"]) if self._data else "—"
         prefix_id = c.create_text(p, p, text="ollama · ", anchor="nw",
                                   fill=t["sub"], font=(_FONT, 8))
         _, _, prefix_x2, _ = c.bbox(prefix_id)

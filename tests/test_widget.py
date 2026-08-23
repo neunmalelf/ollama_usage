@@ -114,12 +114,17 @@ class TestMiniSegments:
     def test_layout_matches_minidisplay(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text == "olu (pro) s: 2.6% (00:00) | w: 1.9% (00:00) ws: 2 wr: 0"
+        assert text == "olu (Pro) s: 2.6% (00:00) | w: 1.9% (00:00) ws: 2 wr: 0"
 
     def test_plan_is_orange(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         plan = next(t for t, c in segs if c == w.THEMES["minimal"][w._PLAN_COLOR])
-        assert plan == "pro"
+        assert plan == "Pro"
+
+    def test_plan_uses_canonical_display_name(self) -> None:
+        segs = w._mini_segments(_make_data(plan="pro"), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert "(Pro)" in text
 
     def test_session_percentage_is_green(self) -> None:
         segs = w._mini_segments(

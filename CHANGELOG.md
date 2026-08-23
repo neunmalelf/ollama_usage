@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python library API via `ollama_usage.get_usage`.
 - Auto browser cookie detection and manual cookie support.
 - Web search and web fetch usage statistics and per-model request counts.
+- Widget shows the canonical subscription name ("Pro") and keeps the
+  autorefresh "Stopped." message visible after exiting.
 - Colored ANSI output.
 - Single-line `--minidisplay` output with optional autorefresh countdown.
 - Desktop notifications via the `[notify]` extra.

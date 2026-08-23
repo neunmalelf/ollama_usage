@@ -24,6 +24,19 @@ _TIME_RE = re.compile(r'data-time="([^"]+)"')
 # Section markers (case-insensitive).
 _SESSION_MARKER = "session usage"
 _WEEKLY_MARKER = "weekly usage"
+# Human-readable subscription names, keyed by the lowercase plan returned by
+# the page. Predefined so displays always show the canonical capitalized name
+# (e.g. "Pro") regardless of the casing in the HTML.
+PLAN_NAMES: dict[str, str] = {
+    "free": "Free",
+    "pro": "Pro",
+    "max": "Max",
+}
+
+
+def plan_display_name(plan: str) -> str:
+    """Return the canonical display name for a plan key (e.g. ``"pro"`` → ``"Pro"``)."""
+    return PLAN_NAMES.get(plan.lower(), plan.capitalize() or "—")
 
 # Web search is not a % quota — it is shown as a request-count segment inside
 # the usage meters, e.g. <button ... data-model="web search" data-requests="2" />.

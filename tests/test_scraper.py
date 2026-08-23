@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ollama_usage.exceptions import AuthError, ParseError
-from ollama_usage.scraper import parse_html
+from ollama_usage.scraper import parse_html, plan_display_name
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +175,18 @@ class TestPlan:
 
     def test_plan_present_in_output(self, free_html: str) -> None:
         assert "plan" in parse_html(free_html)
+
+class TestPlanDisplayName:
+
+    @pytest.mark.parametrize("key,expected", [
+        ("free", "Free"), ("pro", "Pro"), ("max", "Max"),
+        ("PRO", "Pro"), ("Pro", "Pro"), ("FREE", "Free"),
+    ])
+    def test_canonical_display_names(self, key: str, expected: str) -> None:
+        assert plan_display_name(key) == expected
+
+    def test_unknown_plan_capitalized(self) -> None:
+        assert plan_display_name("custom") == "Custom"
 
 
 # ---------------------------------------------------------------------------
