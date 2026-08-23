@@ -106,12 +106,15 @@ class TestSanitizeCookie:
 # ---------------------------------------------------------------------------
 
 def make_data(session_pct: float = 0.0, weekly_pct: float = 0.0,
-              web_search_requests: int | None = None, models: list | None = None) -> dict:
+              web_search_requests: int | None = None,
+              web_fetch_requests: int | None = None,
+              models: list | None = None) -> dict:
     return {
         "plan": "free",
         "session": {"used_pct": session_pct, "resets_at": "2026-04-04T17:00:00Z"},
         "weekly":  {"used_pct": weekly_pct,  "resets_at": "2026-04-06T00:00:00Z"},
         "web_search_requests": web_search_requests,
+        "web_fetch_requests": web_fetch_requests,
         "models": models,
     }
 
@@ -186,6 +189,16 @@ class TestDisplay:
         out = capsys.readouterr().out
         assert "WebSearch" in out
         assert "2" in out
+    def test_text_output_omits_web_fetch_when_absent(self, capsys) -> None:
+        display(make_data(), as_json=False, quiet=False)
+        out = capsys.readouterr().out
+        assert "WebFetch" not in out
+
+    def test_text_output_shows_web_fetch_count_when_present(self, capsys) -> None:
+        display(make_data(web_fetch_requests=3), as_json=False, quiet=False)
+        out = capsys.readouterr().out
+        assert "WebFetch" in out
+        assert "3" in out
 
     def test_text_output_shows_models_when_present(self, capsys) -> None:
         models = [
@@ -405,12 +418,16 @@ class TestMiniLine:
         line = _mini_line(data, use_color=False)
         assert line.startswith("olu (free) s:  42.0% (")
         assert " | w:  77.0% (" in line
-        assert " wr: 2" in line
+        assert " ws: 2 wr: 0" in line
+    def test_web_fetch_shown_when_present(self) -> None:
+        data = make_data(42.0, 77.0, web_fetch_requests=5)
+        line = _mini_line(data, use_color=False)
+        assert " ws: 0 wr: 5" in line
 
     def test_web_search_absent_shows_zero(self) -> None:
         data = make_data(42.0, 77.0)
         line = _mini_line(data, use_color=False)
-        assert " wr: 0" in line
+        assert " ws: 0 wr: 0" in line
 
     def test_color_wraps_plan_and_web_search(self) -> None:
         from ollama_usage.cli import _ANSI
@@ -430,16 +447,17 @@ class TestMiniHorizontal:
         data = make_data(42.0, 77.0, web_search_requests=2)
         out = _mini_horizontal(data, use_color=False)
         lines = out.split("\n")
-        assert len(lines) == 4
+        assert len(lines) == 5
         assert lines[0] == "olu (free)"
         assert lines[1].startswith("s:  42.0% (")
         assert lines[2].startswith("w:  77.0% (")
-        assert lines[3] == "wr: 2"
+        assert lines[3] == "ws: 2"
+        assert lines[4] == "wr: 0"
 
     def test_web_search_absent_shows_zero(self) -> None:
         data = make_data(42.0, 77.0)
         out = _mini_horizontal(data, use_color=False)
-        assert out.endswith("\nwr: 0")
+        assert out.endswith("\nws: 0\nwr: 0")
 
     def test_color_wraps_plan_and_web_search(self) -> None:
         from ollama_usage.cli import _ANSI
@@ -472,10 +490,10 @@ class TestDisplayMinidisplay:
             as_json=False, quiet=False, minidisplay_horizontal=True,
         )
         out = capsys.readouterr().out
-        assert out.count("\n") == 4
+        assert out.count("\n") == 5
         assert out.startswith("olu (free)")
         assert "\ns:  42.0% (" in out
-        assert "\nwr: 2" in out
+        assert "\nws: 2\nwr: 0" in out
 
 
 class TestAutorefreshSleepMini:

@@ -181,8 +181,11 @@ def _mini_line(data: dict, use_color: bool) -> str:
     session_left = _format_remaining_compact(data["session"]["resets_at"], use_color)
     weekly_left = _format_remaining_compact(data["weekly"]["resets_at"], use_color)
     web_search = data.get("web_search_requests")
-    wr = "0" if web_search is None else str(web_search)
+    web_fetch = data.get("web_fetch_requests")
+    ws = "0" if web_search is None else str(web_search)
+    wr = "0" if web_fetch is None else str(web_fetch)
     if use_color:
+        ws = f"{_ANSI[_VALUE_COLOR]}{ws}{_ANSI['reset']}"
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
     sep = _ANSI[decorator_color] + "|" + _ANSI["reset"] if use_color else "|"
     paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
@@ -190,7 +193,7 @@ def _mini_line(data: dict, use_color: bool) -> str:
     return (
         f"olu {paren}{plan}{paren_end} s: {session_pct} {paren}{session_left}{paren_end}"
         f" {sep} w: {weekly_pct} {paren}{weekly_left}{paren_end}"
-        f" wr: {wr}"
+        f" ws: {ws} wr: {wr}"
     )
 
 
@@ -204,8 +207,11 @@ def _mini_horizontal(data: dict, use_color: bool) -> str:
     session_left = _format_remaining_compact(data["session"]["resets_at"], use_color)
     weekly_left = _format_remaining_compact(data["weekly"]["resets_at"], use_color)
     web_search = data.get("web_search_requests")
-    wr = "0" if web_search is None else str(web_search)
+    web_fetch = data.get("web_fetch_requests")
+    ws = "0" if web_search is None else str(web_search)
+    wr = "0" if web_fetch is None else str(web_fetch)
     if use_color:
+        ws = f"{_ANSI[_VALUE_COLOR]}{ws}{_ANSI['reset']}"
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
     paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
     paren_end = _ANSI[decorator_color] + ")" + _ANSI["reset"] if use_color else ")"
@@ -214,6 +220,7 @@ def _mini_horizontal(data: dict, use_color: bool) -> str:
             f"olu {paren}{plan}{paren_end}",
             f"s: {session_pct} {paren}{session_left}{paren_end}",
             f"w: {weekly_pct} {paren}{weekly_left}{paren_end}",
+            f"ws: {ws}",
             f"wr: {wr}",
         ]
     )
@@ -263,6 +270,13 @@ def display(
             if use_color:
                 count = _ANSI[_VALUE_COLOR] + count + _ANSI["reset"]
             print(f"WebSearch: {count} request{'s' if web_search != 1 else ''}")
+
+        web_fetch = data.get("web_fetch_requests")
+        if web_fetch is not None:
+            count = f"{web_fetch:>6}"
+            if use_color:
+                count = _ANSI[_VALUE_COLOR] + count + _ANSI["reset"]
+            print(f"WebFetch : {count} request{'s' if web_fetch != 1 else ''}")
 
         models = data.get("models")
         if models:
@@ -442,10 +456,11 @@ def main():
         "--minidisplay",
         action="store_true",
         help="Single-line compact output, e.g.:\n"
-        "  olu (pro) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) wr: 2\n"
+        "  olu (pro) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) ws: 2 wr: 0\n"
         "  olu = ollama usage, (pro) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
-        "  wr = web search requests this session\n"
+        "  ws = web search requests this session\n"
+        "  wr = web fetch requests this session\n"
         "  remaining time is [dd] hh:mm (days omitted when zero)\n"
         "  clears the terminal before showing the line (TTY only)",
     )
@@ -456,7 +471,8 @@ def main():
         "  olu (pro)\n"
         "  s:  42.0%% (02:46)\n"
         "  w:  77.0%% (1d 06:46)\n"
-        "  wr: 2 [auto-refresh-timer]\n"
+        "  ws: 2\n"
+        "  wr: 0 [auto-refresh-timer]\n"
         "  clears the terminal before showing the output (TTY only)",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")

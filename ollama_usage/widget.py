@@ -184,14 +184,15 @@ def _mini_countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]
 def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     """Return the minidisplay line as colored segments (no bars).
 
-    Layout matches the CLI --minidisplay output:
-    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) wr: <count>``
+    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) ws: <count> wr: <count>``
     """
     plan = data.get("plan", "—")
     session = data.get("session") or {}
     weekly = data.get("weekly") or {}
     web_search = data.get("web_search_requests")
-    wr = "0" if web_search is None else str(web_search)
+    web_fetch = data.get("web_fetch_requests")
+    ws = "0" if web_search is None else str(web_search)
+    wr = "0" if web_fetch is None else str(web_fetch)
 
     segs: list[tuple[str, str]] = []
     segs.append(("olu ", theme["sub"]))
@@ -215,6 +216,8 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
         _seconds_until(weekly.get("resets_at", "")), theme
     ))
     segs.append((")", theme["sub"]))
+    segs.append((" ws: ", theme["sub"]))
+    segs.append((ws, theme[_VALUE_COLOR]))
     segs.append((" wr: ", theme["sub"]))
     segs.append((wr, theme[_VALUE_COLOR]))
     return segs
@@ -580,6 +583,14 @@ class OllamaWidget:
             self._draw_segments(
                 c, bar_x, y,
                 [("Web search requests: ", t["sub"]), (str(ws), t[_VALUE_COLOR])],
+                (_FONT, 8),
+            )
+
+        wr = self._data.get("web_fetch_requests")
+        if wr is not None:
+            self._draw_segments(
+                c, bar_x, y + 18,
+                [("Web fetch requests:  ", t["sub"]), (str(wr), t[_VALUE_COLOR])],
                 (_FONT, 8),
             )
 

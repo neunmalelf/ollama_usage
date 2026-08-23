@@ -32,6 +32,12 @@ _WEB_SEARCH_SEGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Web fetch is a newer request-count stat, rendered the same way as web search.
+_WEB_FETCH_SEGMENT_RE = re.compile(
+    r'data-usage-segment[^>]*data-model="web fetch"[^>]*data-requests="(\d+)"',
+    re.IGNORECASE,
+)
+
 # Per-model request counts in the "Models used this week" list.
 # Each row: <span title="NAME">NAME</span> <span ...> N requests </span>
 _MODELS_LIST_MARKER = "models used this week"
@@ -54,6 +60,7 @@ class UsageData:
     session: PeriodUsage
     weekly: PeriodUsage
     web_search_requests: int | None = None
+    web_fetch_requests: int | None = None
     models: list[dict[str, int]] | None = None
 
     def to_dict(self) -> dict:
@@ -67,6 +74,7 @@ class UsageData:
             "session": _period(self.session),
             "weekly": _period(self.weekly),
             "web_search_requests": self.web_search_requests,
+            "web_fetch_requests": self.web_fetch_requests,
             "models": self.models,
         }
 
@@ -196,6 +204,19 @@ def _extract_web_search_requests(html: str) -> int | None:
     return sum(int(c) for c in counts)
 
 
+def _extract_web_fetch_requests(html: str) -> int | None:
+    """Extract the number of web fetch requests reported on the page.
+
+    Web fetch is rendered as a segment inside the usage meters with a
+    ``data-requests`` attribute (same layout as web search). Returns the total
+    (summed over all meters) or None when no web fetch segment is present.
+    """
+    counts = _WEB_FETCH_SEGMENT_RE.findall(html)
+    if not counts:
+        return None
+    return sum(int(c) for c in counts)
+
+
 def _extract_models(html: str) -> list[dict[str, int]] | None:
     """Extract the per-model request counts from the "Models used this week" list.
 
@@ -223,11 +244,13 @@ def parse_html(html: str) -> dict:
     plan = _extract_plan(html)
     session_pct, weekly_pct, session_time, weekly_time = _extract_usage(html)
     web_search_requests = _extract_web_search_requests(html)
+    web_fetch_requests = _extract_web_fetch_requests(html)
     models = _extract_models(html)
     logger.debug("Parsing HTML...")
     logger.debug(
-        "Parsed: plan=%s session=%.1f%% weekly=%.1f%% web_search_requests=%s models=%s",
-        plan, session_pct, weekly_pct, web_search_requests,
+        "Parsed: plan=%s session=%.1f%% weekly=%.1f%% "
+        "web_search_requests=%s web_fetch_requests=%s models=%s",
+        plan, session_pct, weekly_pct, web_search_requests, web_fetch_requests,
         "None" if models is None else len(models),
     )
     return UsageData(
@@ -235,6 +258,7 @@ def parse_html(html: str) -> dict:
         session=PeriodUsage(used_pct=session_pct, resets_at=session_time),
         weekly=PeriodUsage(used_pct=weekly_pct, resets_at=weekly_time),
         web_search_requests=web_search_requests,
+        web_fetch_requests=web_fetch_requests,
         models=models,
     ).to_dict()
 

@@ -103,6 +103,7 @@ Plan     :  pro
 Session  :   2.6% used - reset at 2026-08-05T20:00:00Z (in  2h 42m)
 Weekly   :   1.9% used - reset at 2026-08-10T00:00:00Z (in  4d 6h 42m)
 WebSearch:      2 requests
+WebFetch :      0 requests
 Model calls this week:
                 2 glm-5.2
                 2 web search
@@ -112,10 +113,10 @@ Model calls this week:
 
 ### Minidisplay output
 ```
-olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) wr: 2
+olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) ws: 2 wr: 0
 ```
 
-`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search request count. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line. When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
+`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line. When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
 
 `--minidisplay-horizontal` shows the same information, but each item on its own line:
 
@@ -123,12 +124,13 @@ olu (pro) s:   2.6% (02:46) | w:   1.9% (1d 06:46) wr: 2
 olu (pro)
 s:   2.6% (02:46)
 w:   1.9% (1d 06:46)
-wr:  2
+ws:  2
+wr:  0
 ```
 
 It clears the terminal before showing the output (TTY only) and supports `--autorefresh` the same way, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
 
-The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `Models used this week:` section lists per-model request counts. Both only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
+The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `WebFetch :` line reports the number of web fetch requests the same way. The `Models used this week:` section lists per-model request counts. All only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 
 Terminal colors (ANSI, self-contained — no external dependency):
 - Plan name — **orange**
@@ -149,6 +151,7 @@ Terminal colors (ANSI, self-contained — no external dependency):
     "resets_at": "2026-08-10T00:00:00Z"
   },
   "web_search_requests": 2,
+  "web_fetch_requests": 0,
   "models": [
     {"name": "glm-5.2", "requests": 2},
     {"name": "web search", "requests": 2},
@@ -158,7 +161,7 @@ Terminal colors (ANSI, self-contained — no external dependency):
 }
 ```
 
-`web_search_requests` is the total number of web search requests on the page. `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). Both are `null` when absent.
+`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
 
 ---
 
@@ -298,6 +301,7 @@ print(usage["plan"])                        # "free"
 print(usage["session"]["used_pct"])         # 0.0
 print(usage["weekly"]["resets_at"])         # "2026-04-06T00:00:00Z"
 print(usage["web_search_requests"])         # None or an int like 2
+print(usage["web_fetch_requests"])          # None or an int like 3
 print(usage["models"])                      # None or [{"name": ..., "requests": ...}, ...]
 ```
 
