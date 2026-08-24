@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Callable
 from ollama_usage.exceptions import NetworkError, OllamaUsageError, AuthError
 from ollama_usage.scraper import get_usage, plan_display_name
+from ollama_usage.shortcuts import bind_quit
 
 logger = logging.getLogger(__name__)
 
@@ -336,8 +337,7 @@ class OllamaWidget:
             widget.bind("<B1-Motion>",       self._on_drag_motion)
             widget.bind("<ButtonRelease-1>", self._on_drag_end)
             widget.bind("<Button-3>",        self._show_menu)
-            widget.bind("<Control-q>",       lambda _e: self._quit())
-            widget.bind("<Control-Q>",       lambda _e: self._quit())
+            bind_quit(widget, lambda _e: self._quit())
 
     def _setup_menu(self) -> None:
         t = self._theme
