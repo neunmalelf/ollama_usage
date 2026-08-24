@@ -35,8 +35,8 @@ PLAN_NAMES: dict[str, str] = {
 
 
 def plan_display_name(plan: str) -> str:
-    """Return the canonical display name for a plan key (e.g. ``"pro"`` → ``"Pro"``)."""
-    return PLAN_NAMES.get(plan.lower(), plan.capitalize() or "—")
+    """Return the canonical display name for a plan key (e.g. ``"pro"`` → ``"PRO"``)."""
+    return PLAN_NAMES.get(plan.lower(), plan.capitalize() or "—").upper()
 
 # Web search is not a % quota — it is shown as a request-count segment inside
 # the usage meters, e.g. <button ... data-model="web search" data-requests="2" />.

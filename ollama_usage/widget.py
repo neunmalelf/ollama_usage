@@ -336,6 +336,8 @@ class OllamaWidget:
             widget.bind("<B1-Motion>",       self._on_drag_motion)
             widget.bind("<ButtonRelease-1>", self._on_drag_end)
             widget.bind("<Button-3>",        self._show_menu)
+            widget.bind("<Control-q>",       lambda _e: self._quit())
+            widget.bind("<Control-Q>",       lambda _e: self._quit())
 
     def _setup_menu(self) -> None:
         t = self._theme

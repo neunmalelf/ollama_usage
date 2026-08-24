@@ -57,13 +57,13 @@ class TestBuildLines:
 
     def test_plan_is_shown(self) -> None:
         lines = build_lines(make_data(plan="free"))
-        assert any("Free" in line for line in lines)
+        assert any("FREE" in line for line in lines)
 
     def test_plan_has_single_space_prefix(self) -> None:
         lines = build_lines(make_data(plan="pro"))
         plan_line = next(line for line in lines if "Plan" in line)
-        # "Plan     : Pro" — one space after the colon, not two.
-        assert plan_line == "Plan     : Pro"
+        # "Plan     : PRO" — one space after the colon, not two.
+        assert plan_line == "Plan     : PRO"
 
     def test_session_and_weekly_percentages(self) -> None:
         lines = build_lines(make_data(session_pct=2.6, weekly_pct=1.9))
@@ -127,12 +127,12 @@ class TestBuildSegments:
     def test_plan_is_orange(self) -> None:
         segs = build_segments(make_data(plan="pro"))
         plan_line = next(l for l in segs if "Plan" in _seg_text(l))
-        assert _seg_color(plan_line, "Pro") == "orange"
+        assert _seg_color(plan_line, "PRO") == "orange"
 
     def test_plan_has_single_space_prefix(self) -> None:
         segs = build_segments(make_data(plan="pro"))
         plan_line = next(l for l in segs if "Plan" in _seg_text(l))
-        assert _seg_text(plan_line) == "Plan     : Pro"
+        assert _seg_text(plan_line) == "Plan     : PRO"
 
     def test_low_percentage_is_green(self) -> None:
         segs = build_segments(make_data(session_pct=2.6))
@@ -318,6 +318,11 @@ class TestOllamaGui:
         gui, fake_root, _, _, _, _ = _make_gui()
         expected = f"{APP_NAME} ({__version__})"
         fake_root.title.assert_called_once_with(expected)
+    def test_ctrl_q_binds_to_quit(self) -> None:
+        gui, fake_root, _, _, _, _ = _make_gui()
+        binds = [c.args[0] for c in fake_root.bind.call_args_list]
+        assert "<Control-q>" in binds
+        assert "<Control-Q>" in binds
 
     def test_icon_set_from_ico_file(self) -> None:
         import ollama_usage.gui as gui_mod
