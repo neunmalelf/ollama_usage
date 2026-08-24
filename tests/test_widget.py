@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from ollama_usage import widget as w
 
@@ -114,17 +114,17 @@ class TestMiniSegments:
     def test_layout_matches_minidisplay(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text == "olu (Pro) s: 2.6% (00:00) | w: 1.9% (00:00) ws: 2 wr: 0"
+        assert text == "olu (PRO) s: 2.6% (00:00) | w: 1.9% (00:00) ws: 2 wr: 0"
 
     def test_plan_is_orange(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         plan = next(t for t, c in segs if c == w.THEMES["minimal"][w._PLAN_COLOR])
-        assert plan == "Pro"
+        assert plan == "PRO"
 
     def test_plan_uses_canonical_display_name(self) -> None:
         segs = w._mini_segments(_make_data(plan="pro"), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert "(Pro)" in text
+        assert "(PRO)" in text
 
     def test_session_percentage_is_green(self) -> None:
         segs = w._mini_segments(
@@ -286,3 +286,21 @@ class TestStatusIndicator:
                 for a, k in inst._canvas.create_text.call_args_list
             )
             assert expected in texts
+
+class TestCtrlQBinding:
+
+    def test_canvas_binds_ctrl_q_to_quit(self) -> None:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._root = MagicMock()
+        inst._canvas = MagicMock()
+        fake_canvas = MagicMock()
+        with patch("ollama_usage.widget.tk.Canvas", return_value=fake_canvas):
+            inst._size = "full"
+            inst._theme = w.THEMES["minimal"]
+            inst._setup_canvas()
+        canvas_binds = [c.args[0] for c in fake_canvas.bind.call_args_list]
+        root_binds = [c.args[0] for c in inst._root.bind.call_args_list]
+        assert "<Control-q>" in canvas_binds
+        assert "<Control-Q>" in canvas_binds
+        assert "<Control-q>" in root_binds
+        assert "<Control-Q>" in root_binds

@@ -456,8 +456,8 @@ def main():
         "--minidisplay",
         action="store_true",
         help="Single-line compact output, e.g.:\n"
-        "  olu (Pro) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) ws: 2 wr: 0\n"
-        "  olu = ollama usage, (Pro) = your plan name\n"
+        "  olu (PRO) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) ws: 2 wr: 0\n"
+        "  olu = ollama usage, (PRO) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
         "  ws = web search requests this session\n"
         "  wr = web fetch requests this session\n"
@@ -468,7 +468,7 @@ def main():
         "--minidisplay-horizontal",
         action="store_true",
         help="Multi-line compact output, each info on its own line, e.g.:\n"
-        "  olu (Pro)\n"
+        "  olu (PRO)\n"
         "  s:  42.0%% (02:46)\n"
         "  w:  77.0%% (1d 06:46)\n"
         "  ws: 2\n"

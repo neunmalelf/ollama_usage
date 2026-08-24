@@ -417,6 +417,8 @@ class OllamaGui:
         self._root.resizable(True, True)
         self._root.minsize(_MIN_WIDTH, _MIN_HEIGHT)
         self._set_icon()
+        self._root.bind("<Control-q>", lambda _e: self._quit())
+        self._root.bind("<Control-Q>", lambda _e: self._quit())
 
         saved = _load_geometry()
         self._root.geometry(saved or _DEFAULT_GEOMETRY)

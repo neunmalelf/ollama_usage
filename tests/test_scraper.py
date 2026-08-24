@@ -179,14 +179,14 @@ class TestPlan:
 class TestPlanDisplayName:
 
     @pytest.mark.parametrize("key,expected", [
-        ("free", "Free"), ("pro", "Pro"), ("max", "Max"),
-        ("PRO", "Pro"), ("Pro", "Pro"), ("FREE", "Free"),
+        ("free", "FREE"), ("pro", "PRO"), ("max", "MAX"),
+        ("PRO", "PRO"), ("Pro", "PRO"), ("FREE", "FREE"),
     ])
     def test_canonical_display_names(self, key: str, expected: str) -> None:
         assert plan_display_name(key) == expected
 
     def test_unknown_plan_capitalized(self) -> None:
-        assert plan_display_name("custom") == "Custom"
+        assert plan_display_name("custom") == "CUSTOM"
 
 
 # ---------------------------------------------------------------------------

@@ -171,7 +171,7 @@ class TestDisplay:
     def test_text_output_contains_plan(self, capsys) -> None:
         display(make_data(), as_json=False, quiet=False)
         out = capsys.readouterr().out
-        assert "Free" in out
+        assert "FREE" in out
 
     def test_text_output_contains_percentages(self, capsys) -> None:
         display(make_data(42.0, 77.0), as_json=False, quiet=False)
@@ -416,7 +416,7 @@ class TestMiniLine:
     def test_plain_output(self) -> None:
         data = make_data(42.0, 77.0, web_search_requests=2)
         line = _mini_line(data, use_color=False)
-        assert line.startswith("olu (Free) s:  42.0% (")
+        assert line.startswith("olu (FREE) s:  42.0% (")
         assert " | w:  77.0% (" in line
         assert " ws: 2 wr: 0" in line
     def test_web_fetch_shown_when_present(self) -> None:
@@ -433,7 +433,7 @@ class TestMiniLine:
         from ollama_usage.cli import _ANSI
         data = make_data(42.0, 77.0, web_search_requests=2)
         line = _mini_line(data, use_color=True)
-        assert _ANSI["orange"] + "Free" + _ANSI["reset"] in line
+        assert _ANSI["orange"] + "FREE" + _ANSI["reset"] in line
         assert _ANSI["cyan"] + "2" + _ANSI["reset"] in line
         # The plan parentheses and the | separator use the decorator color.
         assert _ANSI["grey"] + "(" + _ANSI["reset"] in line
@@ -448,7 +448,7 @@ class TestMiniHorizontal:
         out = _mini_horizontal(data, use_color=False)
         lines = out.split("\n")
         assert len(lines) == 5
-        assert lines[0] == "olu (Free)"
+        assert lines[0] == "olu (FREE)"
         assert lines[1].startswith("s:  42.0% (")
         assert lines[2].startswith("w:  77.0% (")
         assert lines[3] == "ws: 2"
@@ -463,7 +463,7 @@ class TestMiniHorizontal:
         from ollama_usage.cli import _ANSI
         data = make_data(42.0, 77.0, web_search_requests=2)
         out = _mini_horizontal(data, use_color=True)
-        assert _ANSI["orange"] + "Free" + _ANSI["reset"] in out
+        assert _ANSI["orange"] + "FREE" + _ANSI["reset"] in out
         assert _ANSI["cyan"] + "2" + _ANSI["reset"] in out
         assert _ANSI["grey"] + "(" + _ANSI["reset"] in out
         assert _ANSI["grey"] + ")" + _ANSI["reset"] in out
@@ -475,7 +475,7 @@ class TestDisplayMinidisplay:
         display(make_data(42.0, 77.0, web_search_requests=2), as_json=False, quiet=False, minidisplay=True)
         out = capsys.readouterr().out
         assert out.count("\n") == 1
-        assert out.startswith("olu (Free) s:")
+        assert out.startswith("olu (FREE) s:")
 
     def test_json_takes_precedence_over_minidisplay(self, capsys) -> None:
         import json
@@ -491,7 +491,7 @@ class TestDisplayMinidisplay:
         )
         out = capsys.readouterr().out
         assert out.count("\n") == 5
-        assert out.startswith("olu (Free)")
+        assert out.startswith("olu (FREE)")
         assert "\ns:  42.0% (" in out
         assert "\nws: 2\nwr: 0" in out
 
