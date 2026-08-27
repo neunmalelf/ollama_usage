@@ -94,7 +94,7 @@ POSITIONS = {
 
 # Widget dimensions
 _W_COMPACT = (400, 30)
-_W_FULL    = (240, 186)
+_W_FULL    = (240, 172)
 _BAR_W     = 200
 _BAR_H     = 8
 _PAD       = 14
@@ -585,7 +585,7 @@ class OllamaWidget:
             self._draw_segments(
                 c, px2, y, _countdown_segments(secs, t), (_FONT, 8)
             )
-            y += 28
+            y += 20
 
         ws = self._data.get("web_search_requests")
         if ws is not None:

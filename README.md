@@ -46,15 +46,19 @@ ollama-usage
 # One-line usage
 OLLAMA_BROWSER_COOKIE=YOUR_SESSION_COOKIE ollama-usage --json
 
-# Autorefresh mode (default 120s, shows next-refresh timestamp footer)
-ollama-usage --autorefresh
+# Autorefresh is ON by default (120s, shows next-refresh timestamp footer)
+ollama-usage
+# Custom refresh interval
 ollama-usage --autorefresh 60
 ollama-usage --autorefresh 1200
+# Disable autorefresh (single fetch)
+ollama-usage --autorefresh-off
 
 # Single-line compact output
 ollama-usage --minidisplay
 
 # Compact output with autorefresh (appends a cyan countdown)
+ollama-usage --minidisplay
 ollama-usage --minidisplay --autorefresh 60
 
 # Alert mode — exit code 1 if usage exceeds 80%
@@ -69,10 +73,10 @@ ollama-usage --notify
 # One-shot — notify if usage exceeds 75%
 ollama-usage --notify --notify-threshold 75
 
-# Autorefresh — notify when threshold is crossed, no spam between ticks
-ollama-usage --notify --autorefresh
+# Notify when threshold is crossed, no spam between ticks (autorefresh on by default)
+ollama-usage --notify
 
-# Autorefresh — custom threshold and refresh interval
+# Custom threshold and refresh interval
 ollama-usage --notify --autorefresh 60 --notify-threshold 75
 
 # Debug mode
@@ -116,7 +120,7 @@ Model calls this week:
 olu (PRO) s:   2.6% (02:46) | w:   1.9% (1d 06:46) ws: 2 wr: 0
 ```
 
-`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). With `--autorefresh`, a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line. When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
+`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). By default a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line (disable with `--autorefresh-off`). When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
 
 `--minidisplay-horizontal` shows the same information, but each item on its own line:
 
@@ -128,7 +132,7 @@ ws:  2
 wr:  0
 ```
 
-It clears the terminal before showing the output (TTY only) and supports `--autorefresh` the same way, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
+It clears the terminal before showing the output (TTY only) and refreshes the same way by default, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
 
 The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `WebFetch :` line reports the number of web fetch requests the same way. The `Models used this week:` section lists per-model request counts. All only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 
@@ -191,7 +195,7 @@ Two levels are fired automatically:
 - ⚠️ **Warning** — at the configured threshold (default: 80%)
 - 🔴 **Critical** — 15% above the threshold (capped at 100%)
 
-Each level notifies **once per threshold crossing** — no spam during `--autorefresh`.  
+Each level notifies **once per threshold crossing** — no spam during autorefresh.  
 If usage drops back below the threshold, the notification will fire again if it rises once more.
 ```bash
 # One-shot — notify if usage exceeds 80%
@@ -200,8 +204,8 @@ ollama-usage --notify
 # Custom threshold
 ollama-usage --notify --notify-threshold 75
 
-# Continuous monitoring with notifications
-ollama-usage --notify --autorefresh
+# Continuous monitoring with notifications (autorefresh on by default)
+ollama-usage --notify 
 ollama-usage --notify --autorefresh 60 --notify-threshold 75
 ```
 
@@ -247,7 +251,7 @@ launch_gui(cookie=get_cookie_auto)
 - **Right-click** opens a context menu: refresh now, toggle size, or close.
 - **Auto-refreshes** every 30 seconds.
 - Remembers its last position between runs (unless `--position` is given).
-- A status indicator in the top-right corner shows the autorefresh state: **A** when run with `--autorefresh`, **M** otherwise. It is **green** when the data is fresh and **red** when an error occurred (e.g. auth failure).
+- A status indicator in the top-right corner shows the autorefresh state: **A** by default, **M** when run with `--autorefresh-off`. It is **green** when the data is fresh and **red** when an error occurred (e.g. auth failure).
 
 ### Options
 
@@ -368,7 +372,7 @@ Allow access to continue.
 - [x] CLI with `--json`, `--browser`, `--cookie`
 - [x] Python library API
 - [x] Auto browser detection
-- [x] `--autorefresh` mode
+- [x] Autorefresh mode (on by default, `--autorefresh-off` to disable)
 - [x] Colored output
 - [x] `--alert` and `--quiet` for scripting
 - [x] Desktop notifications with `--notify`

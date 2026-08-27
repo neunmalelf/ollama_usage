@@ -20,7 +20,13 @@ from ollama_usage import __version__ as _pkg_version
 from ollama_usage.cli import _next_refresh_timestamp
 from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError
 from ollama_usage.scraper import get_usage, plan_display_name
-from ollama_usage.shortcuts import bind_quit
+from ollama_usage.shortcuts import (
+    CLOSE_KEYS,
+    DARK_KEYS,
+    REFRESH_KEYS,
+    bind_keys,
+    bind_quit,
+)
 
 
 def _gui_refresh_timestamp(seconds_from_now: int) -> str:
@@ -488,17 +494,10 @@ class OllamaGui:
         )
         self._ok_btn.pack(side="right", padx=4)
 
-        # Keyboard shortcuts: Alt+r to refresh, Alt+o or Enter to close,
-        # Alt+d to toggle dark mode.
-        self._root.bind("<Alt-r>", self._on_refresh_key)
-        self._root.bind("<Alt-Key-r>", self._on_refresh_key)
-        self._root.bind("<Alt-o>", self._on_quit_key)
-        self._root.bind("<Alt-Key-o>", self._on_quit_key)
-        self._root.bind("<Return>", self._on_quit_key)
-        self._root.bind("<Escape>", self._on_quit_key)
-        self._root.bind("<Alt-d>", self._on_dark_key)
-        self._root.bind("<Alt-Key-d>", self._on_dark_key)
-
+        bind_quit(self._root, lambda _e: self._quit())
+        bind_keys(self._root, REFRESH_KEYS, self._on_refresh_key)
+        bind_keys(self._root, CLOSE_KEYS, self._on_quit_key)
+        bind_keys(self._root, DARK_KEYS, self._on_dark_key)
         self._fetch_async()
 
     # ---------------------------------------------------------------- data
