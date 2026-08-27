@@ -481,13 +481,18 @@ def main():
         "--browser", type=str, choices=BROWSERS.keys(), help="Force a specific browser"
     )
     parser.add_argument(
+        "--autorefresh-off",
+        action="store_true",
+        help="Disable continuous refresh (single fetch). Autorefresh is on by default.",
+    )
+    parser.add_argument(
         "--autorefresh",
         nargs="?",
         type=int,
         const=120,
-        default=None,
+        default=120,
         metavar="SECONDS",
-        help="Refresh continuously every SECONDS seconds (default: 120).\n"
+        help="Refresh interval in SECONDS (default: 120).\n"
         f"{_ANSI[decorator_color]}Shows a timestamp footer with the next refresh time.{_ANSI['reset']}",
     )
     parser.add_argument(
@@ -516,7 +521,7 @@ def main():
     parser.add_argument(
         "--widget",
         action="store_true",
-        help="Launch desktop widget (A with --autorefresh, M otherwise; green=fresh, red=error)",
+        help="Launch desktop widget (A by default, M with --autorefresh-off; green=fresh, red=error)",
     )
     parser.add_argument(
         "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
@@ -591,11 +596,11 @@ def main():
                 size=args.size,
                 opacity=args.opacity,
                 position=args.position,
-                autorefresh=args.autorefresh is not None,
+                autorefresh=not args.autorefresh_off,
             )
             return
 
-        if args.autorefresh is not None:
+        if not args.autorefresh_off:
             auto_interval = max(1, args.autorefresh)
             mini = (args.minidisplay or args.minidisplay_horizontal) and not args.json and not args.quiet
             horizontal = bool(args.minidisplay_horizontal) and mini
