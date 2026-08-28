@@ -5,7 +5,13 @@ from __future__ import annotations
 import pathlib
 from unittest.mock import patch, mock_open
 
-from ollama_usage.cookie import _chromium_key, get_cookie_env
+import ollama_usage.cookie as cookie_module
+from ollama_usage.cookie import (
+    _chromium_key,
+    _firefox_profiles_dir,
+    _get_default_firefox_profile,
+    get_cookie_env,
+)
 from ollama_usage.exceptions import BrowserNotFoundError
 
 def test_get_cookie_env() -> None:
@@ -14,6 +20,58 @@ def test_get_cookie_env() -> None:
 
     with patch.dict("os.environ", {}, clear=True):
         assert get_cookie_env() is None
+
+
+def test_firefox_profiles_ini_relative_path(tmp_path: pathlib.Path) -> None:
+    base = tmp_path / "firefox"
+    base.mkdir()
+    profile = base / "abc.default-release"
+    profile.mkdir()
+    (profile / "cookies.sqlite").touch()
+    (base / "profiles.ini").write_text(
+        "[Profile0]\nName=default\nIsRelative=1\nPath=abc.default-release\nDefault=1\n",
+        encoding="utf-8",
+    )
+
+    assert _get_default_firefox_profile(base) == profile
+
+
+def test_firefox_profiles_ini_absolute_path(tmp_path: pathlib.Path) -> None:
+    base = tmp_path / "firefox"
+    base.mkdir()
+    profile = tmp_path / "custom-firefox-profile"
+    profile.mkdir()
+    (profile / "cookies.sqlite").touch()
+    (base / "profiles.ini").write_text(
+        f"[Profile0]\nName=custom\nIsRelative=0\nPath={profile}\nDefault=1\n",
+        encoding="utf-8",
+    )
+
+    assert _get_default_firefox_profile(base) == profile
+
+
+def test_firefox_profile_fallback_accepts_custom_profile_name(tmp_path: pathlib.Path) -> None:
+    base = tmp_path / "firefox"
+    profile = base / "custom-profile"
+    profile.mkdir(parents=True)
+    (profile / "cookies.sqlite").touch()
+
+    assert _get_default_firefox_profile(base) == profile
+
+
+def test_firefox_linux_skips_empty_native_directory(tmp_path: pathlib.Path) -> None:
+    native = tmp_path / ".mozilla/firefox"
+    native.mkdir(parents=True)
+    config_profile = tmp_path / ".config/mozilla/firefox/profile"
+    config_profile.mkdir(parents=True)
+    (config_profile / "cookies.sqlite").touch()
+    flatpak_profile = tmp_path / ".var/app/org.mozilla.firefox/.mozilla/firefox/profile"
+    flatpak_profile.mkdir(parents=True)
+    (flatpak_profile / "cookies.sqlite").touch()
+
+    with patch.object(cookie_module.pathlib.Path, "home", return_value=tmp_path), \
+         patch.object(cookie_module, "_SYSTEM", "Linux"):
+        assert _firefox_profiles_dir() == config_profile.parent
 
 @patch("ollama_usage.cookie._SYSTEM", "Windows")
 @patch("pathlib.Path.exists", return_value=True)

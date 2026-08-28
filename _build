@@ -4,6 +4,7 @@
 #   usage: ./_build [OPTIONS]
 #   options:
 #     --release     build, tag with version, and create a GitHub release via gh CLI
+#     --no-install  build the binary without copying it to /usr/local/bin
 #     -h, --help    show this help and exit
 #     --version     show the _build version and exit
 #   produces: dist/ollama-usage[.exe] - one binary with Python + stdlib +
@@ -19,6 +20,7 @@ set -e
 cd "$(dirname "$0")"
 
 DO_RELEASE=0
+NO_INSTALL=0
 
 # --- usage -------------------------------------------------------------------
 usage() {
@@ -29,6 +31,7 @@ usage: ./_build [OPTIONS]
 
 options:
   --release     build binary, tag with automated version (v<version>), and publish release via 'gh'
+  --no-install  build the binary without copying it to the system bin directory
   -h, --help    show this help and exit
   --version     show the _build version and exit
 
@@ -43,8 +46,9 @@ EOF
 case "${1:-}" in
     -h|--help)  usage; exit 0 ;;
     --version)  echo "[_build] v${__VERSION__}"; exit 0 ;;
-    --release)  DO_RELEASE=1 ;;
-    "")         : ;;
+    --release)     DO_RELEASE=1 ;;
+    --no-install)  NO_INSTALL=1 ;;
+    "")            : ;;
     *)          echo "[_build] unknown option: ${1}" >&2; usage >&2; exit 1 ;;
 esac
 
@@ -55,9 +59,19 @@ echo ""
 # --- configuration -----------------------------------------------------------
 PACKAGE="ollama_usage"
 ENTRY_POINT="ollama_usage/cli.py"
-OUTPUT_NAME="ollama-usage.exe"
 OUTPUT_DIR="dist"
 ICON="icon.ico"
+
+case "$(uname -s)" in
+    MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
+        OUTPUT_NAME="ollama_usage.exe"
+        ICON_OPTION=(--windows-icon-from-ico="$ICON")
+        ;;
+    *)
+        OUTPUT_NAME="ollama_usage"
+        ICON_OPTION=()
+        ;;
+esac
 # --- install the built binary to the platform bin dir -------------------------
 # Windows/MSYS2/MINGW/CYGWIN -> /b/winsbin ; Linux/macOS -> /usr/local/bin
 install_binaries() {
@@ -77,11 +91,18 @@ install_binaries() {
             return
             ;;
     esac
-    mkdir -p "$dest" 2>/dev/null || true
     echo "[_build] installing ${FINAL} -> $dest/"
-    cp -f "${FINAL}" "$dest/" \
-        && echo "[_build] installed to $dest/" \
-        || echo "[_build] WARNING: copy ${FINAL} to $dest/ failed" >&2
+    if [ ! -d "$dest" ]; then
+        echo "[_build] ERROR: install directory does not exist: $dest" >&2
+        echo "[_build] Create it once with: sudo mkdir -p $dest" >&2
+        exit 1
+    fi
+    if ! sudo cp -f "$FINAL" "$dest/"; then
+        echo "[_build] ERROR: cannot install ${FINAL} to $dest/" >&2
+        exit 1
+    fi
+    sudo chmod 755 "$dest/$(basename "$FINAL")"
+    echo "[_build] installed to $dest/"
 }
 
 # --- get version from the source __version__ ---------------------------------
@@ -112,11 +133,13 @@ echo "[_build] cleaning previous builds..."
 rm -rf build/ dist/ "$PACKAGE.build" "$PACKAGE.dist" "$ENTRY_POINT.build" "$ENTRY_POINT.dist" *.spec 2>/dev/null || true
 
 # --- Tcl/Tk libraries for the tkinter GUI ------------------------------------
-# Python 3.14 ships the Tcl/Tk script libraries as zip files inside the Python
-# install (tcl/libtcl9.0.4.zip, tcl/libtk9.0.4.zip) instead of the unzipped
-# tclX.Y/tkX.Y folders Nuitka's tk-inter plugin looks for, so the plugin fails
-# with "Could not find Tcl". Extract the zips into the build dir and point
-# Nuitka at the extracted folders explicitly.
+# Python 3.14 may expose tkinter while storing Tcl/Tk script libraries as zip
+# files. Extract them into the build dir for Nuitka's tk-inter plugin.
+if ! python -c "import tkinter" >/dev/null 2>&1; then
+    echo "[_build] ERROR: tkinter is not available in $(python -c 'import sys; print(sys.executable)')" >&2
+    echo "[_build] Install the Tk development/runtime package for this Python 3.14 build, then retry." >&2
+    exit 1
+fi
 TCL_LIBS=$(python - <<'PYEOF'
 import os
 import sys
@@ -195,7 +218,7 @@ python -m nuitka \
     --zig \
     --enable-plugin=tk-inter \
     "${TCL_OPTIONS[@]}" \
-    --windows-icon-from-ico="${ICON}" \
+    "${ICON_OPTION[@]}" \
     --include-data-files="${ICON}=${ICON}" \
     --product-name="ollama-usage" \
     --product-version="${WIN_VERSION}" \
@@ -216,7 +239,11 @@ if [ -f "${FINAL}" ]; then
     echo "[_build] self-contained - the end user needs no Python/pip"
     echo "[_build] testing binary..."
     "${FINAL}" --version
-    install_binaries
+    if [ "$NO_INSTALL" -eq 0 ]; then
+        install_binaries
+    else
+        echo "[_build] installation skipped (--no-install)"
+    fi
 else
     echo "[_build] ERROR: build failed - no output found at ${FINAL}" >&2
     exit 1

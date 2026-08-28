@@ -1,5 +1,46 @@
 # ollama_usage
 
+## Settings files
+
+The GUI and widget keep separate settings files in the user home directory:
+
+- GUI: `~/.ollama-usage-gui.cfg`
+  - `geometry`: window size and position, such as `640x300+100+50`
+  - `darkmode`: whether dark mode is enabled (`true` or `false`)
+  - `autorefresh`: refresh interval in seconds
+- Widget: `~/.ollama-usage-widget.cfg`
+  - `x`: horizontal screen position
+  - `y`: vertical screen position
+  - `size`: `compact` or `full`
+
+These paths use the current user’s home directory; no username or profile path
+is hardcoded. Both files use INI-style CFG syntax. Existing settings are preserved
+independently between GUI and widget.
+
+Example GUI CFG:
+
+```ini
+[gui]
+geometry = 640x300
+darkmode = false
+autorefresh = 120
+```
+
+Example widget CFG:
+
+```ini
+[widget]
+x = 100
+y = 50
+size = compact
+```
+
+Reset both settings files with:
+
+```bash
+ollama_usage --reset-settings
+```
+
 > Programmatic access to your [Ollama Cloud](https://ollama.com) usage quota — until an official API exists.
 
 ![CI](https://github.com/neunmalelf/ollama_usage/actions/workflows/ci.yml/badge.svg)
