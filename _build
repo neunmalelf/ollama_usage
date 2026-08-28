@@ -4,11 +4,11 @@
 #   usage: ./_build [OPTIONS]
 #   options:
 #     --release     build, tag with version, and create a GitHub release via gh CLI
-#     --no-install  build the binary without copying it to /usr/local/bin
+#     --no-install  build the binary without copying it to ~/sbin
 #     -h, --help    show this help and exit
 #     --version     show the _build version and exit
 #   produces: dist/ollama-usage[.exe] - one binary with Python + stdlib +
-#             ollama_usage bundled. The end user needs NO Python, venv or pip.
+#             ollama_usage bundled. The end user needs NO Python, pip or venv.
 #
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
@@ -31,12 +31,15 @@ usage: ./_build [OPTIONS]
 
 options:
   --release     build binary, tag with automated version (v<version>), and publish release via 'gh'
-  --no-install  build the binary without copying it to the system bin directory
+  --no-install  build the binary without copying it to ~/sbin
   -h, --help    show this help and exit
   --version     show the _build version and exit
 
 output: dist/ollama-usage[.exe] - one self-contained binary with Python + stdlib +
-        ollama_usage bundled. The end user needs NO Python, venv or pip installed.
+        ollama_usage bundled. The end user needs NO Python, pip or venv installed.
+
+install: copies the binary to ~/sbin (Linux/macOS) or /b/winsbin (Windows).
+         No sudo needed - the destination is owned by the current user.
 
 exit code: 0 on success, 1 on failure
 EOF
@@ -80,11 +83,8 @@ install_binaries() {
         MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
             dest="/b/winsbin"
             ;;
-        Linux)
-            dest="/usr/local/bin"
-            ;;
-        Darwin)
-            dest="/usr/local/bin"
+        Linux|Darwin)
+            dest="$HOME/sbin"
             ;;
         *)
             echo "[_build] WARNING: unknown OS '$(uname -s)' - skipping install to bin dir" >&2
@@ -92,17 +92,16 @@ install_binaries() {
             ;;
     esac
     echo "[_build] installing ${FINAL} -> $dest/"
-    if [ ! -d "$dest" ]; then
-        echo "[_build] ERROR: install directory does not exist: $dest" >&2
-        echo "[_build] Create it once with: sudo mkdir -p $dest" >&2
-        exit 1
-    fi
-    if ! sudo cp -f "$FINAL" "$dest/"; then
+    mkdir -p "$dest" || { echo "[_build] ERROR: cannot create $dest" >&2; exit 1; }
+    if ! cp -f "$FINAL" "$dest/" || ! chmod 755 "$dest/$(basename "$FINAL")"; then
         echo "[_build] ERROR: cannot install ${FINAL} to $dest/" >&2
         exit 1
     fi
-    sudo chmod 755 "$dest/$(basename "$FINAL")"
     echo "[_build] installed to $dest/"
+    case ":$PATH:" in
+        *":$dest:"*) : ;;
+        *) echo "[_build] NOTE: $dest is not in PATH - add it, or install system-wide with: sudo cp $FINAL /usr/local/bin/" >&2 ;;
+    esac
 }
 
 # --- get version from the source __version__ ---------------------------------

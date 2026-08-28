@@ -334,6 +334,14 @@ launch_widget(
 
 ---
 
+## Keyboard shortcuts
+
+- **Ctrl+C** — stop the CLI. Works in every output mode (plain, minidisplay,
+  autorefresh and alert loops); prints `Stopped.` and exits.
+- **Ctrl+Q** — close the GUI window and the desktop widget.
+
+---
+
 ## Python Usage
 ```python
 from ollama_usage import get_usage
@@ -440,6 +448,9 @@ The script:
 - Embeds `icon.ico` as the executable icon **and** bundles it so the GUI window and widget show it at runtime.
 - Includes the tkinter GUI toolkit (`--enable-plugin=tk-inter`).
 - Copies the finished `.exe` to `~/scoop/apps/python/current/Scripts/`.
+
+On Linux/macOS `_build` installs the binary to `~/sbin` (no sudo needed —
+the directory is owned by the current user).
 
 Requirements:
 - Python with Nuitka installed: `pip install nuitka`
