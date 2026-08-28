@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import pathlib
-from unittest.mock import patch, mock_open
+import sys
+import types
+from unittest.mock import MagicMock, patch, mock_open
 
 import ollama_usage.cookie as cookie_module
 from ollama_usage.cookie import (
@@ -76,24 +78,29 @@ def test_firefox_linux_skips_empty_native_directory(tmp_path: pathlib.Path) -> N
 @patch("ollama_usage.cookie._SYSTEM", "Windows")
 @patch("pathlib.Path.exists", return_value=True)
 @patch("builtins.open", new_callable=mock_open, read_data='{"os_crypt": {"encrypted_key": "aaaaaYWJjZGU="}}')
-@patch("win32crypt.CryptUnprotectData", return_value=(None, b"decrypted_key"))
-def test_chromium_key_caching(mock_crypt, mock_file_open, mock_exists) -> None:
+def test_chromium_key_caching(mock_file_open, mock_exists) -> None:
+    # win32crypt only exists on Windows; stub it so this runs anywhere.
+    stub = types.ModuleType("win32crypt")
+    crypt = MagicMock(return_value=(None, b"decrypted_key"))
+    stub.CryptUnprotectData = crypt
+
     # Clear cache before test to ensure clean state
     _chromium_key.cache_clear()
-    
+
     path = pathlib.Path("some_local_state")
-    
-    # First call - should decrypt and read
-    key1 = _chromium_key(path, "Chrome")
-    assert key1 == b"decrypted_key"
-    assert mock_crypt.call_count == 1
-    assert mock_file_open.call_count == 1
-    
-    # Second call with same parameters - should return cached value and not call open or win32crypt
-    key2 = _chromium_key(path, "Chrome")
-    assert key2 == b"decrypted_key"
-    assert mock_crypt.call_count == 1
-    assert mock_file_open.call_count == 1
+
+    with patch.dict(sys.modules, {"win32crypt": stub}):
+        # First call - should decrypt and read
+        key1 = _chromium_key(path, "Chrome")
+        assert key1 == b"decrypted_key"
+        assert crypt.call_count == 1
+        assert mock_file_open.call_count == 1
+
+        # Second call with same parameters - should return cached value
+        key2 = _chromium_key(path, "Chrome")
+        assert key2 == b"decrypted_key"
+        assert crypt.call_count == 1
+        assert mock_file_open.call_count == 1
 
 @patch("ollama_usage.cookie._SYSTEM", "Darwin")
 @patch("pathlib.Path.exists", return_value=True)

@@ -131,10 +131,30 @@ def _firefox_profile_bases() -> list[pathlib.Path]:
     raise UnsupportedOSError(f"Firefox not supported on {_SYSTEM}")
 
 
+def _root_has_profiles(base: pathlib.Path) -> bool:
+    """Return True when a Firefox profile root contains any profile data."""
+    if not base.is_dir():
+        return False
+    if (base / "profiles.ini").is_file():
+        return True
+    try:
+        return any(
+            entry.is_dir() and (entry / "cookies.sqlite").is_file()
+            for entry in base.iterdir()
+        )
+    except OSError:
+        return False
+
+
 def _firefox_profiles_dir() -> pathlib.Path:
-    """Return the first existing Firefox profile root, for compatibility."""
+    """Return the first Firefox profile root that contains profiles.
+
+    Empty roots (e.g. a leftover ``~/.mozilla/firefox`` after Firefox moved
+    to ``~/.config/mozilla/firefox``) are skipped in favour of populated
+    ones.
+    """
     for base in _firefox_profile_bases():
-        if base.is_dir():
+        if _root_has_profiles(base):
             return base
     return _firefox_profile_bases()[0]
 

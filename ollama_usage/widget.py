@@ -11,6 +11,7 @@ import logging
 import pathlib
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from datetime import datetime, timezone
 
 from typing import Callable
@@ -94,12 +95,15 @@ POSITIONS = {
 }
 
 # Widget dimensions
-_W_COMPACT = (400, 30)
+_W_COMPACT = (560, 30)
 _W_FULL    = (240, 172)
 _BAR_W     = 200
 _BAR_H     = 8
 _PAD       = 14
 _FONT      = "Helvetica"
+#: Sentinel color made fully transparent via ``-transparentcolor``. It must
+#: not collide with any theme color.
+_TRANSPARENT_COLOR = "#000001"
 
 
 # ---------------------------------------------------------------------------
@@ -224,16 +228,85 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     segs.append((wr, theme[_VALUE_COLOR]))
     return segs
 
+def _compact_font() -> tkfont.Font | None:
+    """Return the compact-line font, or ``None`` when no Tk root exists."""
+    try:
+        return tkfont.Font(family=_FONT, size=8)
+    except Exception:
+        return None
+
+
+def _fit_compact_segments(
+    segments: list[tuple[str, str]],
+    plan_color: str,
+    measure: Callable[[str], int],
+    max_width: int,
+) -> list[tuple[str, str]]:
+    """Fit the compact minidisplay line into ``max_width`` pixels.
+
+    A long plan name is ellipsized first so the quota values (``ws``/``wr``)
+    stay visible; if the line still overflows, it is truncated at the tail
+    with an ellipsis. ``measure`` maps text to its pixel width.
+    """
+    def total_width(segs: list[tuple[str, str]]) -> int:
+        return sum(measure(text) for text, _ in segs)
+
+    if total_width(segments) <= max_width:
+        return list(segments)
+
+    fitted = list(segments)
+    ellipsis = "…"
+    plan_index = next(
+        (i for i, (text, color) in enumerate(fitted) if color == plan_color),
+        None,
+    )
+    if plan_index is not None:
+        plan_text, color = fitted[plan_index]
+        fixed_width = (
+            total_width(fitted[:plan_index]) + total_width(fitted[plan_index + 1:])
+        )
+        budget = max_width - fixed_width
+        while plan_text and measure(plan_text) + measure(ellipsis) > budget:
+            plan_text = plan_text[:-1]
+        fitted[plan_index] = (plan_text + ellipsis if plan_text else ellipsis, color)
+
+    if total_width(fitted) > max_width:
+        kept: list[tuple[str, str]] = []
+        x = 0
+        ellipsis_width = measure(ellipsis)
+        for text, color in fitted:
+            width = measure(text)
+            if x + width > max_width:
+                break
+            kept.append((text, color))
+            x += width
+        if kept:
+            tail_text, tail_color = kept[-1]
+            if not tail_text.endswith(ellipsis):
+                x -= measure(tail_text)
+                while tail_text and x + measure(tail_text) + ellipsis_width > max_width:
+                    tail_text = tail_text[:-1]
+                kept[-1] = (tail_text + ellipsis if tail_text else ellipsis, tail_color)
+        fitted = kept
+
+    return fitted
+
 
 def _load_state() -> dict:
-    """Return widget settings from INI format, with legacy JSON compatibility."""
+    """Return widget settings from INI format."""
     parser = configparser.ConfigParser()
     try:
         parser.read(_STATE_FILE, encoding="utf-8")
-        return dict(parser["widget"]) if parser.has_section("widget") else {}
+        state = dict(parser["widget"]) if parser.has_section("widget") else {}
     except Exception:
         logger.debug("Could not load widget state: %s", _STATE_FILE)
-    return {}
+        return {}
+    # The CFG format stores everything as strings; restore numeric keys.
+    for key in ("x", "y"):
+        value = state.get(key)
+        if isinstance(value, str) and value.lstrip("-").isdigit():
+            state[key] = int(value)
+    return state
 
 
 def _save_state(state: dict) -> None:
@@ -282,6 +355,7 @@ class OllamaWidget:
         theme: str      = "dark",
         size: str | None = None,
         opacity: float  = 0.92,
+        background_transparent: bool = False,
         position: str | None = None,
         autorefresh: bool = False,
     ) -> None:
@@ -293,6 +367,7 @@ class OllamaWidget:
         self._opacity     = max(0.1, min(1.0, opacity))
         self._position    = position   # named anchor or None (restored)
         self._autorefresh = autorefresh  # True → "A" indicator, False → "M"
+        self._transparent = background_transparent  # True → no background color
         self._data: dict | None  = None
         self._error: str | None  = None
         self._after_id: str | None = None
@@ -312,25 +387,50 @@ class OllamaWidget:
 
     # ---------------------------------------------------------------- window
 
+    def _bg_color(self) -> str:
+        """Window/canvas background: sentinel color when transparent."""
+        if not getattr(self, "_transparent", False):
+            return self._theme["bg"]
+        return _TRANSPARENT_COLOR if self._transparent_supported else self._theme["bg"]
+
     def _setup_window(self) -> None:
         r = self._root
         r.overrideredirect(True)
         r.wm_attributes("-topmost", True)
         r.wm_attributes("-alpha", self._opacity)
-        r.configure(bg=self._theme["bg"])
+        self._transparent_supported = False
+        if self._transparent:
+            # Make the sentinel color fully transparent. Supported on Windows
+            # and on X11 with a compositor; on Wayland/XWayland Tk may reject
+            # the attribute - fall back to the theme background then.
+            try:
+                r.wm_attributes("-transparentcolor", _TRANSPARENT_COLOR)
+                self._transparent_supported = True
+            except tk.TclError:
+                logger.warning(
+                    "Widget: -transparentcolor not supported on this display - "
+                    "falling back to the regular theme background"
+                )
+        r.configure(bg=self._bg_color())
         r.resizable(False, False)
         r.title("ollama-usage")
 
     def _setup_canvas(self) -> None:
         t = self._theme
         w, h = _W_FULL if self._size == "full" else _W_COMPACT
-        self._root.geometry(f"{w}x{h}")
+        # Keep the window fully on screen when its size changes (toggle).
+        try:
+            x = max(0, min(self._root.winfo_x(), self._root.winfo_screenwidth() - w - 10))
+            y = max(0, min(self._root.winfo_y(), self._root.winfo_screenheight() - h - 10))
+            self._root.geometry(f"{w}x{h}+{x}+{y}")
+        except Exception:
+            self._root.geometry(f"{w}x{h}")
 
         self._canvas.destroy()
         self._canvas = tk.Canvas(
             self._root, width=w, height=h,
-            bg=t["bg"],
-            highlightthickness=1,
+            bg=self._bg_color(),
+            highlightthickness=0 if getattr(self, "_transparent_supported", False) else 1,
             highlightbackground=t["border"],
         )
         self._canvas.pack(fill="both", expand=True)
@@ -408,6 +508,10 @@ class OllamaWidget:
             except Exception as e:
                 logger.debug("Could not restore widget position: %s", e)
 
+        # Keep the whole widget on screen, even if the saved position was
+        # recorded for a different widget size.
+        x = max(0, min(x, sw - ww - 10))
+        y = max(0, min(y, sh - wh - 10))
         self._root.geometry(f"+{x}+{y}")
 
     def _save_position(self) -> None:
@@ -453,7 +557,26 @@ class OllamaWidget:
         self._is_fetching.set()
         if self._after_id:
             self._root.after_cancel(self._after_id)
+            self._after_id = None
         threading.Thread(target=self._fetch, daemon=True, name="ollama-fetch").start()
+        self._poll_fetch()
+
+    def _poll_fetch(self) -> None:
+        """Main-thread poll: redraw and reschedule once the fetch worker is done.
+
+        All Tk calls stay on the main thread; the worker only updates
+        ``_data``/``_error`` and clears ``_is_fetching``.
+        """
+        if not self._is_running:
+            return
+        if self._is_fetching.is_set():
+            self._root.after(50, self._poll_fetch)
+            return
+        try:
+            self._draw()
+        except tk.TclError:
+            return
+        self._after_id = self._root.after(self._interval * 1000, self._fetch_async)
 
     def _fetch(self) -> None:
         try:
@@ -473,19 +596,14 @@ class OllamaWidget:
             self._error = str(exc)
         finally:
             self._is_fetching.clear()  # libère le verrou dans tous les cas
-            if self._is_running:
-                try:
-                    self._root.after(0, self._draw)
-                    self._after_id = self._root.after(
-                        self._interval * 1000, self._fetch_async
-                    )
-                except Exception:
-                    pass
 
     # ---------------------------------------------------------------- drawing
 
     def _draw(self) -> None:
-        self._canvas.delete("all")
+        try:
+            self._canvas.delete("all")
+        except tk.TclError:
+            return  # canvas was replaced; the next draw will repaint
         if self._size == "compact":
             self._draw_compact()
         else:
@@ -496,14 +614,23 @@ class OllamaWidget:
 
     def _draw_segments(
         self, c: tk.Canvas, x: int, y: int,
-        segments: list[tuple[str, str]], font: tuple,
+        segments: list[tuple[str, str]], font: tuple | tkfont.Font,
     ) -> None:
-        """Render colored text segments left-to-right, advancing ``x``."""
+        """Render colored text segments left-to-right, advancing ``x``.
+
+        With a real font the next segment starts at the measured text width;
+        the canvas bbox includes per-item padding and would make the line
+        wider than the fitting logic measured it.
+        """
+        measure = getattr(font, "measure", None)
         for text, color in segments:
             item = c.create_text(x, y, text=text, anchor="nw",
                                  fill=color, font=font)
-            _, _, x2, _ = c.bbox(item)
-            x = x2
+            if measure is not None:
+                x += measure(text)
+            else:
+                _, _, x2, _ = c.bbox(item)
+                x = x2
 
     def _draw_compact(self) -> None:
         c, t   = self._canvas, self._theme
@@ -517,14 +644,28 @@ class OllamaWidget:
                           font=(_FONT, 9))
             return
 
-        # Status indicator (A with --autorefresh, M otherwise) — green when
-        # data is fresh, red on error.
-        dot = t["green"] if self._data and not self._error else t["red"]
-        c.create_text(w - p, p, text=self._indicator_letter(), anchor="ne",
-                      fill=dot, font=(_FONT, 8))
+        # Minidisplay line, fitted so it never runs under the status letter.
+        indicator = self._indicator_letter()
+        font = _compact_font()
+        if font is None:
+            # No Tk root available (headless tests): draw the line unfitted.
+            segments = _mini_segments(self._data, t)
+            draw_font: tuple | tkfont.Font = (_FONT, 8)
+        else:
+            # The line starts at x=p, so reserve padding on both sides plus
+            # the indicator width and a small gap before it.
+            max_x = w - 2 * p - font.measure(indicator) - 6
+            segments = _fit_compact_segments(
+                _mini_segments(self._data, t), t[_PLAN_COLOR], font.measure, max_x
+            )
+            draw_font = font
+        self._draw_segments(c, p, p, segments, draw_font)
 
-        # Minidisplay line (same layout as --minidisplay, no bars)
-        self._draw_segments(c, p, p, _mini_segments(self._data, t), (_FONT, 8))
+        # Status indicator (A with --autorefresh, M otherwise) — green when
+        # data is fresh, red on error. Drawn last so it is never overwritten.
+        dot = t["green"] if self._data and not self._error else t["red"]
+        c.create_text(w - p, p, text=indicator, anchor="ne",
+                      fill=dot, font=(_FONT, 8))
 
     def _draw_full(self) -> None:
         c, t   = self._canvas, self._theme
@@ -539,6 +680,18 @@ class OllamaWidget:
         prefix_id = c.create_text(p, p, text="ollama · ", anchor="nw",
                                   fill=t["sub"], font=(_FONT, 8))
         _, _, prefix_x2, _ = c.bbox(prefix_id)
+        header_font = _compact_font()
+        if header_font is not None:
+            # Keep the plan out from under the status letter.
+            plan_budget = (w - p - header_font.measure(self._indicator_letter()) - 6) - prefix_x2
+            plan = "".join(
+                text for text, _ in _fit_compact_segments(
+                    [(plan, t[_PLAN_COLOR])],
+                    t[_PLAN_COLOR],
+                    header_font.measure,
+                    plan_budget,
+                )
+            )
         c.create_text(prefix_x2, p, text=plan, anchor="nw",
                       fill=t[_PLAN_COLOR], font=(_FONT, 8))
         # Status indicator (A with --autorefresh, M otherwise) — green when
@@ -627,6 +780,7 @@ def launch_widget(
     theme: str           = "dark",
     size: str            = "full",
     opacity: float       = 0.92,
+    background_transparent: bool = False,
     position: str | None = None,
     autorefresh: bool    = False,
 ) -> None:
@@ -661,4 +815,5 @@ def launch_widget(
         opacity=opacity,
         position=position,
         autorefresh=autorefresh,
+        background_transparent=background_transparent,
     ).run()

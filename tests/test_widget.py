@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import threading
 from unittest.mock import MagicMock, patch
 
 from ollama_usage import widget as w
@@ -15,22 +15,18 @@ from ollama_usage import widget as w
 class TestResolveSize:
 
     def test_explicit_size_wins(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.json")
-        w._STATE_FILE.write_text(
-            json.dumps({"size": "compact"}), encoding="utf-8"
-        )
+        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.cfg")
+        w._STATE_FILE.write_text("[widget]\nsize = compact\n", encoding="utf-8")
         assert _make_widget()._resolve_size("full") == "full"
 
     def test_restores_saved_size_when_none(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.json")
-        w._STATE_FILE.write_text(
-            json.dumps({"size": "compact"}), encoding="utf-8"
-        )
+        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.cfg")
+        w._STATE_FILE.write_text("[widget]\nsize = compact\n", encoding="utf-8")
         assert _make_widget()._resolve_size(None) == "compact"
 
     def test_defaults_to_full_when_no_saved_size(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.json")
-        w._STATE_FILE.write_text(json.dumps({"x": 1}), encoding="utf-8")
+        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.cfg")
+        w._STATE_FILE.write_text("[widget]\nx = 1\n", encoding="utf-8")
         assert _make_widget()._resolve_size(None) == "full"
 
 
@@ -67,18 +63,18 @@ def _make_widget(size: str = "full", position: str | None = None):
 class TestRestorePosition:
 
     def test_restores_saved_position_when_no_named(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.cfg")
         w._STATE_FILE.write_text(
-            json.dumps({"x": 123, "y": 456, "size": "compact"}), encoding="utf-8"
+            "[widget]\nx = 123\ny = 456\nsize = compact\n", encoding="utf-8"
         )
         inst = _make_widget(size="compact", position=None)
         inst._restore_position()
         inst._root.geometry.assert_called_once_with("+123+456")
 
     def test_named_position_overrides_saved(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(w, "_STATE_FILE", tmp_path / "state.cfg")
         w._STATE_FILE.write_text(
-            json.dumps({"x": 123, "y": 456, "size": "full"}), encoding="utf-8"
+            "[widget]\nx = 123\ny = 456\nsize = full\n", encoding="utf-8"
         )
         inst = _make_widget(size="full", position="top-left")
         inst._restore_position()
@@ -304,3 +300,141 @@ class TestCtrlQBinding:
         assert "<Control-Q>" in canvas_binds
         assert "<Control-q>" in root_binds
         assert "<Control-Q>" in root_binds
+
+# ---------------------------------------------------------------------------
+# _fit_compact_segments — compact minidisplay line fitting
+# ---------------------------------------------------------------------------
+
+def _measure_len(text: str) -> int:
+    """Deterministic stand-in for font measurement (7 px per char)."""
+    return len(text) * 7
+
+
+class TestFitCompactSegments:
+
+    def test_short_line_unchanged(self) -> None:
+        segs = [("olu ", "g"), ("(PRO)", "o"), (" s: 2.6% (00:00)", "g")]
+        out = w._fit_compact_segments(segs, "o", _measure_len, 2000)
+        assert out == segs
+
+    def test_long_plan_ellipsized_keeps_quota_values(self) -> None:
+        segs = [
+            ("olu ", "g"),
+            ("(DEEPSEEK-V4-FLASH:CLOUD)", "o"),
+            (" s: 42.1% (05:39) | w: 12.3% (2d 09:39) ws: 12 wr: 4", "g"),
+        ]
+        # Only the plan name overflows: give the fixed parts full room plus a
+        # 100 px plan budget, so the tail must stay intact.
+        fixed = sum(_measure_len(t) for t, _ in segs) - _measure_len("(DEEPSEEK-V4-FLASH:CLOUD)")
+        max_width = fixed + 100
+        out = w._fit_compact_segments(segs, "o", _measure_len, max_width)
+        text = "".join(t for t, _ in out)
+        assert "…" in text
+        assert "ws: 12" in text and "wr: 4" in text
+        assert sum(_measure_len(t) for t, _ in out) <= max_width
+
+    def test_tail_truncated_when_short_plan_still_overflows(self) -> None:
+        segs = [
+            ("olu ", "g"),
+            ("(PRO)", "o"),
+            (" s: 42.1% (05:39) | w: 12.3% (2d 09:39) ws: 12 wr: 4", "g"),
+        ]
+        max_width = (
+            _measure_len("olu ") + _measure_len("(PRO)") + _measure_len(" s: 42.1% (05:39)")
+        )
+        out = w._fit_compact_segments(segs, "o", _measure_len, max_width)
+        text = "".join(t for t, _ in out)
+        assert "…" in text
+        assert sum(_measure_len(t) for t, _ in out) <= max_width
+
+
+class TestCompactFitDraw:
+
+    class _FakeFont:
+        def measure(self, text: str) -> int:
+            return len(text) * 7
+
+    def _draw(self, plan: str, autorefresh: bool = True) -> list[str]:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._canvas = MagicMock()
+        inst._canvas.bbox.return_value = (0, 0, 10, 10)
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "compact"
+        inst._data = {
+            "plan": plan,
+            "session": {"used_pct": 42.1, "resets_at": "2026-08-28T20:00:00Z"},
+            "weekly": {"used_pct": 12.3, "resets_at": "2026-08-31T00:00:00Z"},
+            "web_search_requests": 12,
+            "web_fetch_requests": 4,
+        }
+        inst._error = None
+        inst._autorefresh = autorefresh
+        with patch("ollama_usage.widget.tkfont.Font", return_value=self._FakeFont()):
+            inst._draw_compact()
+        return [
+            k.get("text") or ""
+            for a, k in inst._canvas.create_text.call_args_list
+        ]
+
+    def test_long_plan_ellipsized_quota_values_visible(self) -> None:
+        texts = self._draw("deepseek-v4-flash:cloud")
+        joined = "".join(texts)
+        assert "…" in joined
+        assert "ws: 12" in joined
+        assert "wr: 4" in joined
+
+    def test_indicator_drawn_after_line(self) -> None:
+        texts = self._draw("pro")
+        assert texts[-1] == "A"
+
+
+# ---------------------------------------------------------------------------
+# _poll_fetch — main-thread fetch completion
+# ---------------------------------------------------------------------------
+
+class TestPollFetch:
+
+    def _inst(self, fetching: bool):
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._root = MagicMock()
+        inst._canvas = MagicMock()
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "full"
+        inst._is_running = True
+        inst._is_fetching = threading.Event()
+        if fetching:
+            inst._is_fetching.set()
+        inst._interval = 30
+        inst._after_id = None
+        inst._draw = MagicMock()
+        inst._fetch_async = MagicMock()
+        return inst
+
+    def test_poll_redraws_and_reschedules_when_done(self) -> None:
+        inst = self._inst(fetching=False)
+        inst._poll_fetch()
+        inst._draw.assert_called_once()
+        inst._root.after.assert_called_once_with(30000, inst._fetch_async)
+        assert inst._after_id is not None
+
+    def test_poll_waits_while_fetching(self) -> None:
+        inst = self._inst(fetching=True)
+        inst._poll_fetch()
+        inst._draw.assert_not_called()
+        inst._root.after.assert_called_once_with(50, inst._poll_fetch)
+
+    def test_poll_stops_when_not_running(self) -> None:
+        inst = self._inst(fetching=True)
+        inst._is_running = False
+        inst._poll_fetch()
+        inst._root.after.assert_not_called()
+
+    def test_fetch_async_starts_worker_and_polls(self) -> None:
+        inst = self._inst(fetching=False)
+        # _inst() stubs _fetch_async for the poll tests; use the real method here.
+        inst._fetch_async = w.OllamaWidget._fetch_async.__get__(inst)
+        with patch("ollama_usage.widget.threading.Thread") as mock_thread:
+            inst._fetch_async()
+        mock_thread.assert_called_once()
+        assert inst._is_fetching.is_set()
+        inst._root.after.assert_called_once_with(50, inst._poll_fetch)
