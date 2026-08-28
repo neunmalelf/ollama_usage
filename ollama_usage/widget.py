@@ -6,7 +6,7 @@ Requires tkinter (stdlib). On minimal Linux installs:
 
 from __future__ import annotations
 
-import json
+import configparser
 import logging
 import pathlib
 import threading
@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_STATE_FILE = pathlib.Path.home() / ".ollama-usage-widget.json"
+# Widget-only settings file.
+_STATE_FILE = pathlib.Path.home() / ".ollama-usage-widget.cfg"
 
 THEMES: dict[str, dict[str, str]] = {
     "dark": {
@@ -225,20 +226,23 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
 
 
 def _load_state() -> dict:
-    """Return the saved widget state dict, or an empty dict on failure."""
+    """Return widget settings from INI format, with legacy JSON compatibility."""
+    parser = configparser.ConfigParser()
     try:
-        data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data
+        parser.read(_STATE_FILE, encoding="utf-8")
+        return dict(parser["widget"]) if parser.has_section("widget") else {}
     except Exception:
         logger.debug("Could not load widget state: %s", _STATE_FILE)
     return {}
 
 
 def _save_state(state: dict) -> None:
-    """Persist the widget state (position + size) to disk."""
+    """Persist widget settings as an INI-style CFG file."""
     try:
-        _STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+        parser = configparser.ConfigParser()
+        parser["widget"] = {key: str(value) for key, value in state.items()}
+        with _STATE_FILE.open("w", encoding="utf-8") as stream:
+            parser.write(stream)
     except Exception:
         logger.debug("Could not save widget state: %s", _STATE_FILE)
 
@@ -393,6 +397,10 @@ class OllamaWidget:
                 state = _load_state()
                 saved_x = state.get("x", default_x)
                 saved_y = state.get("y", default_y)
+                if isinstance(saved_x, str) and saved_x.lstrip("-").isdigit():
+                    saved_x = int(saved_x)
+                if isinstance(saved_y, str) and saved_y.lstrip("-").isdigit():
+                    saved_y = int(saved_y)
                 if not isinstance(saved_x, int) or not isinstance(saved_y, int):
                     raise ValueError("State file contains non-integer coordinates")
                 if 0 <= saved_x <= sw - 20 and 0 <= saved_y <= sh - 20:

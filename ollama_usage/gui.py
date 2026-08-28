@@ -7,7 +7,7 @@ On minimal Linux installs you may need:
 
 from __future__ import annotations
 
-import json
+import configparser
 import logging
 import pathlib
 import sys
@@ -65,8 +65,8 @@ def _resolve_icon() -> pathlib.Path:
 # checkout, an installed package, and frozen (PyInstaller/Nuitka) builds.
 _ICON_PATH = _resolve_icon()
 
-# State file used to persist the window size and position between runs.
-_STATE_FILE = pathlib.Path.home() / ".ollama-usage-gui.json"
+# GUI-only settings file.
+_STATE_FILE = pathlib.Path.home() / ".ollama-usage-gui.cfg"
 
 # Default window geometry (width x height). The width is chosen so the
 # Session / Weekly lines (with their full ISO reset timestamps) are not
@@ -331,20 +331,23 @@ def build_segments(
 # ---------------------------------------------------------------------------
 
 def _load_state() -> dict:
-    """Return the saved GUI state dict, or an empty dict on failure."""
+    """Return GUI settings from INI format, with legacy JSON compatibility."""
+    parser = configparser.ConfigParser()
     try:
-        data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data
+        parser.read(_STATE_FILE, encoding="utf-8")
+        return dict(parser["gui"]) if parser.has_section("gui") else {}
     except Exception:
         logger.debug("Could not load GUI state: %s", _STATE_FILE)
     return {}
 
 
 def _save_state(state: dict) -> None:
-    """Persist the GUI state (geometry + dark mode) to disk."""
+    """Persist GUI settings as an INI-style CFG file."""
     try:
-        _STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+        parser = configparser.ConfigParser()
+        parser["gui"] = {key: str(value) for key, value in state.items()}
+        with _STATE_FILE.open("w", encoding="utf-8") as stream:
+            parser.write(stream)
     except Exception:
         logger.debug("Could not save GUI state: %s", _STATE_FILE)
 
@@ -369,6 +372,8 @@ def _load_darkmode() -> bool:
     value = _load_state().get("darkmode")
     if isinstance(value, bool):
         return value
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "on"}
     return False
 
 
@@ -388,6 +393,8 @@ def _load_autorefresh() -> int:
     value = _load_state().get("autorefresh")
     if isinstance(value, int) and value > 0:
         return value
+    if isinstance(value, str) and value.isdigit() and int(value) > 0:
+        return int(value)
     return _DEFAULT_AUTOREFRESH
 
 

@@ -1,4 +1,5 @@
 import argparse
+import pathlib
 import json
 import logging
 import os
@@ -10,6 +11,7 @@ from typing import Optional
 
 from ollama_usage import __version__ as _pkg_version
 from ollama_usage.cookie import (
+    firefox_profile_diagnostics,
     get_cookie_auto,
     get_cookie_brave,
     get_cookie_chrome,
@@ -481,6 +483,16 @@ def main():
         "--browser", type=str, choices=BROWSERS.keys(), help="Force a specific browser"
     )
     parser.add_argument(
+        "--debug-firefox-profiles",
+        action="store_true",
+        help="Show every Firefox profile location searched, then exit",
+    )
+    parser.add_argument(
+        "--reset-settings",
+        action="store_true",
+        help="Reset GUI and widget settings files, then exit",
+    )
+    parser.add_argument(
         "--autorefresh-off",
         action="store_true",
         help="Disable continuous refresh (single fetch). Autorefresh is on by default.",
@@ -550,6 +562,29 @@ def main():
         _enable_windows_vt()
 
     try:
+        if args.reset_settings:
+            for name in (".ollama-usage-gui.cfg", ".ollama-usage-widget.cfg"):
+                path = pathlib.Path.home() / name
+                try:
+                    path.unlink(missing_ok=True)
+                    print(f"Reset settings: {path}")
+                except OSError as exc:
+                    print(f"Could not reset {path}: {exc}", file=sys.stderr)
+                    raise SystemExit(1)
+            return
+
+        if args.debug_firefox_profiles:
+            print("Firefox profile search paths:")
+            for base, profiles in firefox_profile_diagnostics():
+                status = "exists" if base.is_dir() else "missing"
+                print(f"- [{status}] {base}")
+                if profiles:
+                    for profile in profiles:
+                        print(f"    profile: {profile} (cookies.sqlite found)")
+                elif base.is_dir():
+                    print("    (no profile containing cookies.sqlite found)")
+            return
+
         if args.debug:
             logging.basicConfig(
                 level=logging.DEBUG,

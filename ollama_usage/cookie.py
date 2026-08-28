@@ -112,26 +112,31 @@ def _query_cookie(db_path: str, query: str, params: tuple) -> bytes | None:
 
 # --- Firefox ---
 
-def _firefox_profiles_dir() -> pathlib.Path:
-    """Retourne le répertoire des profils Firefox, en tenant compte de Snap/Flatpak sur Linux."""
+def _firefox_profile_bases() -> list[pathlib.Path]:
+    """Return all possible Firefox profile roots for the current platform."""
+    home = pathlib.Path.home()
     if _SYSTEM == "Windows":
-        return pathlib.Path.home() / "AppData/Roaming/Mozilla/Firefox/Profiles"
+        return [home / "AppData/Roaming/Mozilla/Firefox"]
     if _SYSTEM == "Darwin":
-        return pathlib.Path.home() / "Library/Application Support/Firefox/Profiles"
+        return [home / "Library/Application Support/Firefox"]
     if _SYSTEM == "Linux":
-        # Ordre de priorité : installation classique, puis Snap, puis Flatpak
-        candidates = [
-            pathlib.Path.home() / ".mozilla/firefox",
-            pathlib.Path.home() / "snap/firefox/common/.mozilla/firefox",
-            pathlib.Path.home() / ".var/app/org.mozilla.firefox/.mozilla/firefox",
+        return [
+            home / ".mozilla/firefox",
+            home / ".config/mozilla/firefox",
+            home / ".var/app/org.mozilla.firefox/.mozilla/firefox",
+            home / ".var/app/org.mozilla.firefox/.mozilla",
+            home / ".var/app/org.mozilla.firefox/data/.mozilla/firefox",
+            home / "snap/firefox/common/.mozilla/firefox",
         ]
-        for path in candidates:
-            if path.exists():
-                logger.debug("Firefox profiles dir: %s", path)
-                return path
-        # Aucun trouvé — retourner le chemin standard pour que l'erreur soit explicite
-        return candidates[0]
     raise UnsupportedOSError(f"Firefox not supported on {_SYSTEM}")
+
+
+def _firefox_profiles_dir() -> pathlib.Path:
+    """Return the first existing Firefox profile root, for compatibility."""
+    for base in _firefox_profile_bases():
+        if base.is_dir():
+            return base
+    return _firefox_profile_bases()[0]
 
 
 def _get_default_firefox_profile(base: pathlib.Path) -> pathlib.Path:
@@ -143,7 +148,10 @@ def _get_default_firefox_profile(base: pathlib.Path) -> pathlib.Path:
     """
     candidates: list[pathlib.Path] = []
 
-    for ini_candidate in [base.parent / "profiles.ini", base / "profiles.ini"]:
+    ini_candidates = [base / "profiles.ini", base.parent / "profiles.ini"]
+    if base.name == ".mozilla":
+        ini_candidates.insert(0, base / "firefox" / "profiles.ini")
+    for ini_candidate in ini_candidates:
         if not ini_candidate.exists():
             continue
         config = configparser.ConfigParser()
@@ -171,33 +179,71 @@ def _get_default_firefox_profile(base: pathlib.Path) -> pathlib.Path:
         break
 
     if not candidates:
-        logger.debug("profiles.ini not found or empty — falling back to glob")
-        candidates = list(base.glob("*.default*"))
+        logger.debug("profiles.ini not found or empty — falling back to profile search")
+        # Firefox profiles are normally named *.default-release, but older
+        # installs and custom profiles may use different names.
+        candidates = [
+            path for path in base.iterdir()
+            if path.is_dir() and (path / "cookies.sqlite").exists()
+        ] if base.is_dir() else []
 
     if not candidates:
-        raise BrowserNotFoundError("No Firefox profile found.")
+        raise BrowserNotFoundError(f"No Firefox profile found under {base}")
 
     for profile in candidates:
         db = profile / "cookies.sqlite"
         if db.exists():
-            logger.debug("Firefox default profile: %s", profile)
+            logger.debug("Firefox profile: %s", profile)
             return profile
 
-    logger.debug("No profile with cookies.sqlite found, returning: %s", candidates[0])
-    return candidates[0]
+    raise BrowserNotFoundError(f"No Firefox profile with cookies.sqlite found under {base}")
+
+
+def firefox_profile_diagnostics() -> list[tuple[pathlib.Path, list[pathlib.Path]]]:
+    """Return every Firefox root and profile discovered without reading cookies."""
+    result: list[tuple[pathlib.Path, list[pathlib.Path]]] = []
+    for base in _firefox_profile_bases():
+        profiles: list[pathlib.Path] = []
+        if base.is_dir():
+            try:
+                profiles = sorted(
+                    path for path in base.iterdir()
+                    if path.is_dir() and (path / "cookies.sqlite").is_file()
+                )
+            except OSError:
+                pass
+        result.append((base, profiles))
+    return result
 
 
 def get_cookie_firefox() -> str | None:
-    """Read __Secure-session from Firefox."""
-    base = _firefox_profiles_dir()
-    profile = _get_default_firefox_profile(base)
-    with _copy_db(profile / "cookies.sqlite") as db:
-        value = _query_cookie(
-            db,
-            "SELECT value FROM moz_cookies WHERE host=? AND name=?",
-            (_COOKIE_HOST, _COOKIE_NAME),
-        )
-    return value if isinstance(value, str) else None
+    """Read __Secure-session from any discoverable Firefox profile."""
+    bases = _firefox_profile_bases()
+    found_profile = False
+    for base in bases:
+        if not base.is_dir():
+            continue
+        try:
+            profile = _get_default_firefox_profile(base)
+        except BrowserNotFoundError:
+            continue
+        found_profile = True
+        with _copy_db(profile / "cookies.sqlite") as db:
+            value = _query_cookie(
+                db,
+                "SELECT value FROM moz_cookies "
+                "WHERE (host=? OR host=?) AND name=? "
+                "ORDER BY CASE WHEN host=? THEN 0 ELSE 1 END",
+                (_COOKIE_HOST, "." + _COOKIE_HOST, _COOKIE_NAME, _COOKIE_HOST),
+            )
+        if isinstance(value, str) and value:
+            logger.debug("Firefox cookie found in %s", profile)
+            return value
+    if found_profile:
+        return None
+    raise BrowserNotFoundError(
+        "No Firefox profile found in configured Firefox profile locations"
+    )
 
 
 # --- Chromium-based browsers ---
