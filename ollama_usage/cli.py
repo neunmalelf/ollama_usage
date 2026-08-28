@@ -446,21 +446,28 @@ class _HelpFormatter(argparse.HelpFormatter):
         return lines
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
-        """Wrap each line independently so epilog newlines survive."""
+        """Wrap each line independently so epilog newlines survive.
+
+        Lines that already fit are kept verbatim, preserving their leading
+        indentation; longer lines wrap with the given indent as usual.
+        """
         fill = super()._fill_text
-        return "\n".join(
-            fill(line, width, indent) if line else ""
-            for line in text.splitlines()
-        )
+        lines: list[str] = []
+        for line in text.splitlines():
+            if len(line) <= width:
+                lines.append(line)
+            else:
+                lines.extend(fill(line, width, indent).splitlines())
+        return "\n".join(lines)
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Display your Ollama Cloud quota usage",
         epilog=(
-            "keyboard shortcuts:\n"
+            "  keyboard shortcuts:\n"
             "  Ctrl+C  stop the CLI (autorefresh, minidisplay, alert loops)\n"
-            "  Ctrl+Q  close the GUI window and the desktop widget"
+            "  Ctrl+Q  close the GUI window and the desktop widget\n\n"
         ),
         formatter_class=_HelpFormatter,
     )
@@ -560,6 +567,13 @@ def main():
     parser.add_argument(
         "--size", default=None, choices=["compact", "full"],
         help="Widget size (default: restore last used size)",
+    )
+    parser.add_argument("--opacity", type=float, default=0.92, metavar="0.0-1.0")
+    parser.add_argument(
+        "--position",
+        default=None,
+        choices=["top-left", "top-right", "bottom-left", "bottom-right"],
+        help="Widget screen corner (default: restore last used position)",
     )
     parser.add_argument(
         "--background-transparent",
