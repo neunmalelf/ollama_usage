@@ -1,4 +1,5 @@
 __pycache__/
+0_bak/*
 *.pyc
 *.pyo
 .env
