@@ -33,7 +33,16 @@ dependencies = [
 
 [project.optional-dependencies]
 notify = ["plyer"]
-dev    = ["pytest", "pytest-cov", "plyer"]
+widget = ["PySide6"]
+dev    = [
+    "pytest",
+    "pytest-cov",
+    "plyer",
+    "ruff",
+    "bandit",
+    "mypy",
+    "nuitka",
+]
 
 [project.urls]
 Homepage = "https://github.com/neunmalelf/ollama_usage"

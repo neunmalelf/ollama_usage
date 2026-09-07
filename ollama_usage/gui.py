@@ -616,6 +616,8 @@ class OllamaGui:
                 self._error = f"Auth error: {refresh_exc}"
         except OllamaUsageError as exc:
             self._error = str(exc)
+        except Exception as exc:
+            self._error = f"Error: {exc}"
         finally:
             self._is_fetching.clear()
             try:
