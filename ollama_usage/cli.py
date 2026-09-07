@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import platform
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -460,6 +461,77 @@ class _HelpFormatter(argparse.HelpFormatter):
                 lines.extend(fill(line, width, indent).splitlines())
         return "\n".join(lines)
 
+class _VoiceResetTracker:
+    """Speak configured texts when the session/weekly usage resets.
+
+    A reset is detected by the ``resets_at`` timestamp changing between two
+    successful fetches (the quota rolled over to a new period). The first
+    fetch only establishes the baseline, so a reset that happened before the
+    program started is not announced.
+    """
+
+    def __init__(self, session_text: str | None, weekly_text: str | None) -> None:
+        self._session_text = session_text
+        self._weekly_text = weekly_text
+        self._session_reset: str | None = None
+        self._weekly_reset: str | None = None
+
+    def check(self, data: dict) -> None:
+        if not self._session_text and not self._weekly_text:
+            return
+        session = data.get("session") or {}
+        weekly = data.get("weekly") or {}
+        session_reset = session.get("resets_at")
+        weekly_reset = weekly.get("resets_at")
+
+        if (
+            self._session_text
+            and session_reset
+            and self._session_reset is not None
+            and session_reset != self._session_reset
+        ):
+            from ollama_usage.voice import speak_async
+            speak_async(self._session_text)
+        if (
+            self._weekly_text
+            and weekly_reset
+            and self._weekly_reset is not None
+            and weekly_reset != self._weekly_reset
+        ):
+            from ollama_usage.voice import speak_async
+            speak_async(self._weekly_text)
+
+        if session_reset:
+            self._session_reset = session_reset
+        if weekly_reset:
+            self._weekly_reset = weekly_reset
+
+
+def _warn_transparent_fallback(args) -> None:
+    """Print a notice when a fully transparent widget background is impossible.
+
+    Tk's ``-transparentcolor`` is a Windows-only attribute and plain Tk has
+    no per-pixel transparency on X11/Wayland; there the fully transparent
+    widget needs PySide6, and without it the widget falls back to a
+    translucent window. The notice must come from the original process
+    (which still owns the terminal): in ``--daemon`` mode the detached
+    child's stderr is /dev/null, so it would be lost.
+    """
+    if (
+        getattr(args, "widget", False)
+        and getattr(args, "background_transparent", False)
+        and sys.platform != "win32"
+    ):
+        from ollama_usage.widget import qt_transparency_supported
+
+        if not qt_transparency_supported():
+            print(
+                "Warning: --background-transparent needs PySide6 for a fully "
+                "transparent background; PySide6 was not found, so the widget "
+                "uses a translucent background instead. "
+                "Install with: pip install PySide6",
+                file=sys.stderr,
+            )
 
 def main():
     parser = argparse.ArgumentParser(
@@ -468,6 +540,9 @@ def main():
             "  keyboard shortcuts:\n"
             "  Ctrl+C  stop the CLI (autorefresh, minidisplay, alert loops)\n"
             "  Ctrl+Q  close the GUI window and the desktop widget\n\n"
+            "  desktop widget:\n"
+            "  right-click  context menu (refresh now, toggle size, close)\n"
+            "  drag         move the widget\n\n"
         ),
         formatter_class=_HelpFormatter,
     )
@@ -551,6 +626,27 @@ def main():
         help="Threshold for desktop notifications in PERCENTAGE (%%) (default: 80, requires --notify)",
     )
     parser.add_argument(
+        "--voice-info-when-session-usage-was-reset",
+        nargs="?",
+        const="ollama_usage the session usage has been reset",
+        metavar="TEXT",
+        help="Speak TEXT when the session usage resets (default: 'ollama_usage "
+        "the session usage has been reset'). Requires a speech backend: "
+        "espeak-ng, spd-say or festival on Linux, 'say' on macOS, PowerShell "
+        "on Windows; optional high-quality neural voices via 'pip install "
+        "edge-tts' or kokoro-onnx. No special hardware needed - any speakers "
+        "or headphones work.",
+    )
+    parser.add_argument(
+        "--voice-info-when-weekly-usage-was-reset",
+        nargs="?",
+        const="ollama_usage the weekly usage has been reset",
+        metavar="TEXT",
+        help="Speak TEXT when the weekly usage resets (default: 'ollama_usage "
+        "the weekly usage has been reset'). Same speech backend requirements "
+        "as --voice-info-when-session-usage-was-reset.",
+    )
+    parser.add_argument(
         "--widget",
         action="store_true",
         help="Launch desktop widget (A by default, M with --autorefresh-off; green=fresh, red=error)",
@@ -568,7 +664,10 @@ def main():
         "--size", default=None, choices=["compact", "full"],
         help="Widget size (default: restore last used size)",
     )
-    parser.add_argument("--opacity", type=float, default=0.92, metavar="0.0-1.0")
+    parser.add_argument(
+        "--opacity", type=float, default=None, metavar="0.0-1.0",
+        help="Widget window opacity (default: 0.92; 0.80 with --background-transparent)",
+    )
     parser.add_argument(
         "--position",
         default=None,
@@ -578,10 +677,72 @@ def main():
     parser.add_argument(
         "--background-transparent",
         action="store_true",
-        help="Widget background fully transparent (no background color)",
+        help="Widget background fully transparent (native on Windows; on "
+        "Linux/macOS requires PySide6, otherwise falls back to a translucent "
+        "background)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logs")
+    parser.add_argument(
+        "--daemon", "--damon",
+        action="store_true",
+        dest="daemon",
+        help="Run in background (daemon) so terminal can be closed. "
+        "Terminal is not blocked. Stop with: killall ollama_usage "
+        "(the onefile payload shuts down a moment later)",
+    )
     args = parser.parse_args()
+
+    # When run without any argument, show help instead of traceback / obscure error
+    # (user request: `ollama_usage` without params should show help, not KeyError)
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
+
+    # Surface the --background-transparent platform limitation before the
+    # daemon spawns a detached child (whose stderr is /dev/null).
+    _warn_transparent_fallback(args)
+    # Handle daemon mode: spawn a detached background process so the terminal
+    # can be closed.  We use subprocess.Popen instead of os.fork() to avoid
+    # deadlocks in Nuitka-compiled binaries where the process is multi-threaded.
+    if getattr(args, "daemon", False):
+        # Build the command line for the child (everything except --daemon/--damon)
+        child_args = [a for a in sys.argv[1:] if a not in ("--daemon", "--damon")]
+        # Determine the right executable.
+        # sys.argv[0] is the path the user invoked (the real binary).
+        # On Linux, /proc/self/exe is an alternative but in Nuitka onefile
+        # binaries it resolves to the extracted temp path which gets cleaned
+        # up when the parent exits — so always prefer sys.argv[0].
+        exe_path = pathlib.Path(sys.argv[0]).resolve()
+        if exe_path.suffix in (".py", ".pyc") or "python" in exe_path.name.lower():
+            # Running as `python -m ollama_usage` or `python cli.py`
+            exe = [sys.executable, "-m", "ollama_usage"]
+        else:
+            # Nuitka binary or direct script invocation
+            exe = [str(exe_path)]
+        # On Windows, use CREATE_NEW_PROCESS_GROUP for detachment
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = (
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0)
+            )
+        try:
+            child = subprocess.Popen(
+                exe + child_args,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=(sys.platform != "win32"),
+                creationflags=creationflags,
+            )
+            print(
+                f"ollama_usage daemon started (pid {child.pid}) - "
+                f"terminal can be closed. Stop with: killall ollama_usage"
+            )
+            sys.exit(0)
+        except Exception as e:
+            print(f"Failed to daemonize: {e}", file=sys.stderr)
+            sys.exit(1)
 
     if _HAS_COLOR:
         _enable_windows_vt()
@@ -633,6 +794,11 @@ def main():
 
         notify_state = NotifyState()
 
+        voice_tracker = _VoiceResetTracker(
+            args.voice_info_when_session_usage_was_reset,
+            args.voice_info_when_weekly_usage_was_reset,
+        )
+
         if args.notify and not notify_available():
             print(
                 "Warning: --notify requires plyer. Install it with: "
@@ -672,6 +838,7 @@ def main():
                     sys.stdout.flush()
                     try:
                         data = get_usage(cookie)
+                        voice_tracker.check(data)
                         if mini:
                             line = _mini_display(data, _use_color(), horizontal)
                         else:
@@ -693,6 +860,7 @@ def main():
                                 )
                                 cookie = get_current_cookie()
                                 data = get_usage(cookie)
+                                voice_tracker.check(data)
                                 if mini:
                                     line = _mini_display(data, _use_color(), horizontal)
                                 else:
@@ -739,6 +907,14 @@ def main():
 
     except OllamaUsageError as e:
         print(f"Error: {e}", file=sys.stderr)
+        parser.print_help(sys.stderr)
+        raise SystemExit(1)
+    except Exception as e:
+        # Any other unexpected error (e.g. KeyError before fix) should show help, not traceback
+        # Use logger for debug, but show friendly message and help for user
+        logger.debug("Unexpected error", exc_info=True)
+        print(f"Error: {e}", file=sys.stderr)
+        parser.print_help(sys.stderr)
         raise SystemExit(1)
 
 

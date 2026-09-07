@@ -65,6 +65,45 @@ pip install "ollama-usage[notify] @ git+https://github.com/neunmalelf/ollama_usa
 ```
 ---
 
+## Testing
+
+### Setup
+Create a virtual environment and install the package with development dependencies:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+```
+
+The `dev` extra installs the full test/lint/build toolchain: `pytest`, `pytest-cov`,
+`ruff`, `bandit`, `mypy`, and `nuitka`.
+
+### Run the test suite
+
+```bash
+# All tests
+pytest
+
+# Same command CI runs (with coverage report)
+pytest tests/ --cov=ollama_usage --cov-report=term-missing
+```
+
+### Lint & type-check
+
+```bash
+# Ruff linter (same as CI)
+ruff check ollama_usage/
+
+# Bandit security scan (same skip list as CI)
+bandit -r ollama_usage/ --skip B404,B603,B607,B310,B110
+
+# Static type checking
+mypy ollama_usage/
+```
+
+---
+
 ## CLI Usage
 ```bash
 # Auto-detect browser and display usage
@@ -252,6 +291,61 @@ ollama-usage --notify --autorefresh 60 --notify-threshold 75
 
 ---
 
+## Voice announcements (usage reset)
+
+`--voice-info-when-session-usage-was-reset` and `--voice-info-when-weekly-usage-was-reset`
+speak a message aloud when the session or weekly quota rolls over to a new period
+while the CLI is running (autorefresh mode). The first fetch only establishes the
+baseline, so a reset that happened before the program started is not announced.
+
+```bash
+# Default texts
+ollama-usage --autorefresh 60 --voice-info-when-session-usage-was-reset \
+             --voice-info-when-weekly-usage-was-reset
+
+# Custom texts
+ollama-usage --autorefresh 60 \
+             --voice-info-when-session-usage-was-reset "session quota refreshed" \
+             --voice-info-when-weekly-usage-was-reset "weekly quota refreshed"
+```
+
+### How it works
+
+The announcement is spoken by the best speech backend found on the system
+(checked in this order): **Kokoro** neural TTS (if `kokoro-onnx` is installed and
+the model files are present), **Microsoft Edge-TTS** (if `edge-tts` is installed),
+macOS `say`, Windows PowerShell SAPI, Python `pyttsx3`, then the Linux CLI tools
+`spd-say`, `espeak-ng`, `espeak`, `festival`. Speech runs in a background thread,
+so the refresh loop is never blocked.
+
+### Installing the components
+
+- **Linux (Fedora/RHEL):** `sudo dnf install espeak-ng` (or `speech-dispatcher` for
+  `spd-say`). Debian/Ubuntu: `sudo apt install espeak-ng`.
+- **macOS:** nothing to install — the built-in `say` command is used.
+- **Windows:** nothing to install — the built-in PowerShell SAPI voices are used.
+- **Optional high-quality neural voices:**
+  - `pip install edge-tts` — Microsoft neural voices (needs internet at speak time).
+  - `pip install kokoro-onnx` + download the model:
+    `python -c "from ollama_usage.voice import kokoro_ensure_models; kokoro_ensure_models()"`
+    (fully local, CPU-only, ~300 MB in `~/.cache/kokoro`).
+
+### Hardware requirements
+
+None beyond a normal desktop/laptop: any machine with **speakers or headphones**
+and a working audio output works. The synthesis is pure software — no GPU, no
+special sound card, no microphone. Edge-TTS additionally needs an internet
+connection; Kokoro and the system engines work fully offline.
+
+### Building
+
+The voice feature is part of the normal build — no extra build-time components.
+The speech engines are runtime system tools, not bundled into the binary; build
+with the usual `./_build` and install the engine of your choice on the target
+machine.
+
+---
+
 ## GUI window
 
 `--gui` opens a simple, cross-platform window (Windows, Linux, macOS) that shows the same quota information as the CLI. It uses **tkinter** (Python stdlib), so no extra dependency is required.
@@ -288,6 +382,12 @@ launch_gui(cookie=get_cookie_auto)
 
 `--widget` opens a small, **always-on-top** desktop widget that shows your quota as live gauges and auto-refreshes. It uses **tkinter** (Python stdlib), so no extra dependency is required.
 
+> `--background-transparent` renders a **per-pixel transparent** widget (only the
+> text and bars float over the wallpaper). This is impossible with Tk outside
+> Windows, so on Linux/macOS it needs **PySide6** — install it with
+> `pip install ollama-usage[widget]` (or `pip install PySide6`). Without PySide6
+> the widget falls back to a translucent Tk window and prints a warning.
+
 - **Frameless** and draggable — click and drag anywhere to move it.
 - **Right-click** opens a context menu: refresh now, toggle size, or close.
 - **Auto-refreshes** every 30 seconds.
@@ -300,8 +400,9 @@ launch_gui(cookie=get_cookie_auto)
 |--------|--------|---------|-------------|
 | `--theme` | `dark`, `light`, `minimal` | `dark` | Color scheme |
 | `--size` | `full`, `compact` | `full` | `full` shows bars + countdown; `compact` shows text only |
-| `--opacity` | `0.1` – `1.0` | `0.92` | Window transparency |
+| `--opacity` | `0.1` – `1.0` | `0.92` | Window opacity (`0.80` with `--background-transparent`) |
 | `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |
+| `--background-transparent` | – | off | Fully transparent background — the text/bars float over the wallpaper. Native on Windows; needs **PySide6** on Linux/macOS (otherwise falls back to a translucent window) |
 
 ```bash
 # Default widget (dark, full, top-right)
@@ -312,6 +413,9 @@ ollama-usage --widget --theme light --size compact --position bottom-right
 
 # Semi-transparent minimal widget
 ollama-usage --widget --theme minimal --opacity 0.8
+
+# Fully transparent background (PySide6 on Linux/macOS; native on Windows)
+ollama-usage --widget --background-transparent
 ```
 
 ### Python usage
@@ -331,6 +435,38 @@ launch_widget(
 
 > On minimal Linux installs, tkinter may need to be installed separately:
 > `sudo apt install python3-tk`
+
+### Daemon mode (run in background)
+
+Add `--daemon` (alias `--damon` for typo-compatibility) to run widget/GUI or autorefresh in background — terminal is not blocked and can be closed:
+
+```bash
+# Widget in background
+ollama_usage --widget --daemon
+ollama_usage --widget --autorefresh --browser firefox --daemon
+# Alias --damon also works
+ollama_usage --widget --damon
+
+# GUI in background
+ollama_usage --gui --daemon
+
+# Any long-running CLI also supports it
+ollama_usage --minidisplay --daemon
+```
+
+The daemon detaches via `fork`/`setsid` and redirects stdio to `/dev/null` so closing the terminal does not kill it (keeps `DISPLAY`/`XAUTHORITY` for widget).
+
+Stop it with `killall`:
+
+```bash
+killall ollama_usage          # stops the running instances; the extracted
+                              # onefile payload (process name ollama_usage.bi)
+                              # shuts down a moment later
+# or more precise, catches every process whose command line matches:
+pkill -f ollama_usage
+```
+
+> On Windows `os.fork` is unavailable — `--daemon` is a no-op there.
 
 ---
 
@@ -436,25 +572,34 @@ Allow access to continue.
 
 ## Building a standalone executable
 
-You can compile `ollama-usage` into a single Windows `.exe` with **Nuitka** (native-compiled, faster-starting, harder-to-decompile than PyInstaller).
+You can compile `ollama-usage` into a single standalone binary (`.exe` on Windows) with **Nuitka** (native-compiled, faster-starting, harder-to-decompile than PyInstaller).
 
 ```bash
 # From the project root
-./_compile.sh
+./_build
 ```
 
 The script:
-- Compiles to a single-file `dist/ollama-usage.exe` (onefile mode).
+- Compiles to a single-file `dist/ollama-usage.exe` (Windows) or `dist/ollama-usage` (Linux/macOS) in onefile mode.
 - Embeds `icon.ico` as the executable icon **and** bundles it so the GUI window and widget show it at runtime.
 - Includes the tkinter GUI toolkit (`--enable-plugin=tk-inter`).
-- Copies the finished `.exe` to `~/scoop/apps/python/current/Scripts/`.
+- Copies the finished binary to `~/sbin` (Linux/macOS) or `/b/winsbin` (Windows) — no sudo needed.
 
-On Linux/macOS `_build` installs the binary to `~/sbin` (no sudo needed —
-the directory is owned by the current user).
+Options:
+
+| Option | Effect |
+|--------|--------|
+| `--no-install` | Build only — skip copying the binary to the bin directory |
+| `--release` | Build, tag with the version, and publish a GitHub release via `gh` |
+
+```bash
+./_build --no-install     # just produce dist/
+./_build --release        # build + tag + GitHub release
+```
 
 Requirements:
-- Python with Nuitka installed: `pip install nuitka`
-- On Python 3.13+, Nuitka needs the **Zig** compiler (installed via scoop) rather than MinGW64. The script handles this automatically with `--zig`.
+- Python with `nuitka` installed: `pip install "ollama-usage[dev]"` (or `pip install nuitka`)
+- On Python 3.13+, Nuitka needs the **Zig** compiler (installed via scoop or downloaded automatically on first build — the script handles this with `--zig`).
 
 > The build takes a few minutes on first run (it compiles all modules to C).
 

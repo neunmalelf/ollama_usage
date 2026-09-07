@@ -275,7 +275,13 @@ def _chromium_key(local_state: pathlib.Path, browser_name: str = "Chrome") -> by
         raise BrowserNotFoundError(f"Local State not found: {local_state}")
     with open(local_state, encoding="utf-8") as f:
         data = json.load(f)
-    encrypted_key = b64decode(data["os_crypt"]["encrypted_key"])[5:]
+    try:
+        encrypted_key = b64decode(data["os_crypt"]["encrypted_key"])[5:]
+    except (KeyError, TypeError, ValueError) as e:
+        raise BrowserNotFoundError(
+            f"Local State for {browser_name} is missing or has no encrypted_key "
+            f"(is {browser_name} installed and has been run at least once?): {e}"
+        ) from e
 
     if _SYSTEM == "Windows":
         import win32crypt
@@ -419,6 +425,9 @@ def get_cookie_auto() -> str:
                 return cookie
         except OllamaUsageError as e:
             logger.debug("%s failed: %s", browser.__name__, e)
+            continue
+        except Exception as e:  # catch KeyError, JSON errors, etc. and treat as browser not usable
+            logger.debug("%s failed with unexpected error: %s", browser.__name__, e)
             continue
     raise OllamaUsageError(
         "No Ollama session cookie found in any supported browser. "

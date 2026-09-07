@@ -1,19 +1,20 @@
 #!/bin/bash
 # _build - build ollama-usage into a single self-contained binary with Nuitka
-#          and optionally release it via gh.
+#          and deploy it to the platform destination folder, optionally
+#          release it via gh.
 #   usage: ./_build [OPTIONS]
 #   options:
 #     --release     build, tag with version, and create a GitHub release via gh CLI
-#     --no-install  build the binary without copying it to ~/sbin
+#     --no-install  build the binary without deploying it to the destination folder
 #     -h, --help    show this help and exit
 #     --version     show the _build version and exit
-#   produces: dist/ollama-usage[.exe] - one binary with Python + stdlib +
+#   produces: dist/ollama_usage[.exe] - one binary with Python + stdlib +
 #             ollama_usage bundled. The end user needs NO Python, pip or venv.
 #
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20260823090603"
+__VERSION__="1.0.20260906050000"
 
 set -e
 
@@ -31,15 +32,17 @@ usage: ./_build [OPTIONS]
 
 options:
   --release     build binary, tag with automated version (v<version>), and publish release via 'gh'
-  --no-install  build the binary without copying it to ~/sbin
+  --no-install  build the binary without deploying it to the destination folder
   -h, --help    show this help and exit
   --version     show the _build version and exit
 
-output: dist/ollama-usage[.exe] - one self-contained binary with Python + stdlib +
+output: dist/ollama_usage[.exe] - one self-contained binary with Python + stdlib +
         ollama_usage bundled. The end user needs NO Python, pip or venv installed.
 
-install: copies the binary to ~/sbin (Linux/macOS) or /b/winsbin (Windows).
-         No sudo needed - the destination is owned by the current user.
+deploy: copies the binary to the per-OS destination folder (CONFIGURATION_FINAL_BINARY_DESTINATION_*),
+        overwriting any existing binary there:
+          Linux/macOS -> ~/sbin    Windows -> /b/winsbin
+        No sudo needed - the destinations are owned by the current user.
 
 exit code: 0 on success, 1 on failure
 EOF
@@ -59,41 +62,71 @@ echo ""
 echo "[_build] v${__VERSION__} - build ollama-usage standalone binary"
 echo ""
 
-# --- configuration -----------------------------------------------------------
-PACKAGE="ollama_usage"
-ENTRY_POINT="ollama_usage/cli.py"
-OUTPUT_DIR="dist"
-ICON="icon.ico"
+# =============================================================================
+# CONFIGURATION_ - global build & deploy settings (the ONE place to edit)
+# =============================================================================
+CONFIGURATION_PACKAGE="ollama_usage"              # python package to bundle
+CONFIGURATION_ENTRY_POINT="ollama_usage/cli.py"  # nuitka compile target
+CONFIGURATION_OUTPUT_DIR="dist"                  # build output directory
+CONFIGURATION_ICON="icon.ico"                    # icon file (embedded + windows .exe)
+CONFIGURATION_BINARY_NAME="ollama_usage"         # binary name; ".exe" appended on Windows
+CONFIGURATION_PYTHON="python"                    # interpreter used to run nuitka
+CONFIGURATION_BUNDLE_QT6="auto"                  # auto: bundle PySide6 (transparent widget)
+                                                 # when importable in CONFIGURATION_PYTHON;
+                                                 # "no" to always skip (smaller binary, the
+                                                 # widget then falls back to translucent Tk)
 
+# --- deploy destinations for the final single-file executable -----------------
+CONFIGURATION_FINAL_BINARY_DESTINATION_LINUX="$HOME/sbin"            # Linux deploy target
+CONFIGURATION_FINAL_BINARY_DESTINATION_MACOS="$HOME/sbin"            # macOS deploy target
+CONFIGURATION_FINAL_BINARY_DESTINATION_WINDOWS="/b/winsbin"          # Windows (MSYS2/MINGW/CYGWIN) deploy target
+
+# --- docs installed alongside the binary --------------------------------------
+CONFIGURATION_MAN_PAGE="man/ollama-usage.1"
+CONFIGURATION_MAN_DEST="$HOME/.local/share/man/man1"      # user-local, picked up by mandb
+CONFIGURATION_TLDR_PAGE="tldr/pages/common/ollama-usage.md"
+CONFIGURATION_TLDR_DEST="$HOME/.cache/tldr/pages/common"  # default cache dir of tldr clients
+# =============================================================================
+
+# --- platform-specific output name / icon -------------------------------------
 case "$(uname -s)" in
     MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
-        OUTPUT_NAME="ollama_usage.exe"
-        ICON_OPTION=(--windows-icon-from-ico="$ICON")
+        OUTPUT_NAME="${CONFIGURATION_BINARY_NAME}.exe"
+        ICON_OPTION=(--windows-icon-from-ico="$CONFIGURATION_ICON")
         ;;
     *)
-        OUTPUT_NAME="ollama_usage"
+        OUTPUT_NAME="${CONFIGURATION_BINARY_NAME}"
         ICON_OPTION=()
         ;;
 esac
-# --- install the built binary to the platform bin dir -------------------------
-# Windows/MSYS2/MINGW/CYGWIN -> /b/winsbin ; Linux/macOS -> /usr/local/bin
+
+# --- deploy the built binary to the platform destination folder ---------------
 install_binaries() {
     local dest=""
     case "$(uname -s)" in
         MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
-            dest="/b/winsbin"
+            dest="$CONFIGURATION_FINAL_BINARY_DESTINATION_WINDOWS"
             ;;
-        Linux|Darwin)
-            dest="$HOME/sbin"
+        Darwin)
+            dest="$CONFIGURATION_FINAL_BINARY_DESTINATION_MACOS"
+            ;;
+        Linux)
+            dest="$CONFIGURATION_FINAL_BINARY_DESTINATION_LINUX"
             ;;
         *)
-            echo "[_build] WARNING: unknown OS '$(uname -s)' - skipping install to bin dir" >&2
+            echo "[_build] WARNING: unknown OS '$(uname -s)' - skipping deploy" >&2
             return
             ;;
     esac
     echo "[_build] installing ${FINAL} -> $dest/"
     mkdir -p "$dest" || { echo "[_build] ERROR: cannot create $dest" >&2; exit 1; }
-    if ! cp -f "$FINAL" "$dest/" || ! chmod 755 "$dest/$(basename "$FINAL")"; then
+    # Overwrite any existing binary at the destination. Remove the old file
+    # first instead of relying on cp -f: plain cp would fail with "Text file
+    # busy" when the previous binary is still running (e.g. the desktop
+    # widget). Unlinking gives the new file a fresh inode - the running
+    # instance keeps the old one, the next launch picks up the new binary.
+    rm -f "$dest/$(basename "$FINAL")"
+    if ! cp "$FINAL" "$dest/" || ! chmod 755 "$dest/$(basename "$FINAL")"; then
         echo "[_build] ERROR: cannot install ${FINAL} to $dest/" >&2
         exit 1
     fi
@@ -104,14 +137,51 @@ install_binaries() {
     esac
 }
 
+# --- install man page and tldr page (always overwrites with newest versions) --
+install_docs() {
+    local man_src="$CONFIGURATION_MAN_PAGE"
+    local tldr_src="$CONFIGURATION_TLDR_PAGE"
+    local man_dest="$CONFIGURATION_MAN_DEST"
+    local tldr_dest="$CONFIGURATION_TLDR_DEST"
+
+    case "$(uname -s)" in
+        MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
+            echo "[_build] Windows: skipping man page install (no man(1))"
+            ;;
+        *)
+            if [ -f "$man_src" ]; then
+                echo "[_build] installing man page $man_src -> $man_dest/"
+                mkdir -p "$man_dest" || { echo "[_build] ERROR: cannot create $man_dest" >&2; return 1; }
+                cp -f "$man_src" "$man_dest/" || { echo "[_build] ERROR: cannot install man page" >&2; return 1; }
+            else
+                echo "[_build] WARNING: $man_src not found - skipping man page" >&2
+            fi
+            ;;
+    esac
+
+    if [ -f "$tldr_src" ]; then
+        echo "[_build] installing tldr page $tldr_src -> $tldr_dest/"
+        mkdir -p "$tldr_dest" || { echo "[_build] ERROR: cannot create $tldr_dest" >&2; return 1; }
+        cp -f "$tldr_src" "$tldr_dest/" || { echo "[_build] ERROR: cannot install tldr page" >&2; return 1; }
+    else
+        echo "[_build] WARNING: $tldr_src not found - skipping tldr page" >&2
+    fi
+
+    # Refresh the man database so `man ollama-usage` resolves immediately.
+    if command -v mandb >/dev/null 2>&1; then
+        echo "[_build] updating man database (mandb)..."
+        mandb -q "$HOME/.local/share/man" 2>/dev/null || true
+    fi
+}
+
 # --- get version from the source __version__ ---------------------------------
-VERSION=$(python -c "from ollama_usage import __version__; print(__version__)" 2>/dev/null || echo "0.0.0")
+VERSION=$("$CONFIGURATION_PYTHON" -c "from ollama_usage import __version__ as v; print(v)" 2>/dev/null || echo "0.0.0")
 [ -n "$VERSION" ] || VERSION="0.0.0"
 echo "[_build] ollama-usage version: $VERSION"
 
 # Windows version metadata (16-bit fields, max 65535; collapse long digit runs
 # like a YYYYMMDDhhmmss timestamp into the first 5 digits).
-WIN_VERSION=$(python -c "
+WIN_VERSION=$("$CONFIGURATION_PYTHON" -c "
 import re
 from ollama_usage import __version__ as v
 parts = [p for p in re.split(r'[^0-9]+', str(v)) if p]
@@ -122,24 +192,25 @@ print('.'.join(parts[:4]))
 " 2>/dev/null || echo "0.0.0.0")
 
 # --- ensure nuitka -----------------------------------------------------------
-if ! python -c "import nuitka" >/dev/null 2>&1; then
+if ! "$CONFIGURATION_PYTHON" -c "import nuitka" >/dev/null 2>&1; then
     echo "[_build] installing nuitka via pip..."
-    python -m pip install --upgrade nuitka || { echo "[_build] nuitka install FAILED" >&2; exit 1; }
+    "$CONFIGURATION_PYTHON" -m pip install --upgrade nuitka || { echo "[_build] nuitka install FAILED" >&2; exit 1; }
 fi
 
 # --- clean previous builds ---------------------------------------------------
 echo "[_build] cleaning previous builds..."
-rm -rf build/ dist/ "$PACKAGE.build" "$PACKAGE.dist" "$ENTRY_POINT.build" "$ENTRY_POINT.dist" *.spec 2>/dev/null || true
+rm -rf build/ dist/ "$CONFIGURATION_PACKAGE.build" "$CONFIGURATION_PACKAGE.dist" \
+       "$CONFIGURATION_ENTRY_POINT.build" "$CONFIGURATION_ENTRY_POINT.dist" *.spec 2>/dev/null || true
 
 # --- Tcl/Tk libraries for the tkinter GUI ------------------------------------
 # Python 3.14 may expose tkinter while storing Tcl/Tk script libraries as zip
 # files. Extract them into the build dir for Nuitka's tk-inter plugin.
-if ! python -c "import tkinter" >/dev/null 2>&1; then
-    echo "[_build] ERROR: tkinter is not available in $(python -c 'import sys; print(sys.executable)')" >&2
+if ! "$CONFIGURATION_PYTHON" -c "import tkinter" >/dev/null 2>&1; then
+    echo "[_build] ERROR: tkinter is not available in $("$CONFIGURATION_PYTHON" -c 'import sys; print(sys.executable)')" >&2
     echo "[_build] Install the Tk development/runtime package for this Python 3.14 build, then retry." >&2
     exit 1
 fi
-TCL_LIBS=$(python - <<'PYEOF'
+TCL_LIBS=$("$CONFIGURATION_PYTHON" - <<'PYEOF'
 import os
 import sys
 import zipfile
@@ -206,31 +277,78 @@ else
     echo "[_build] note: no Tcl/Tk libraries found next to Python, letting Nuitka auto-detect."
 fi
 
+# --- PySide6 (fully transparent widget) --------------------------------------
+# --background-transparent renders a per-pixel transparent widget via PySide6.
+# Bundle it when available so the single-file binary can do it standalone;
+# without it the widget falls back to the translucent Tk background.
+QT_PLUGIN_OPTION=()
+case "$CONFIGURATION_BUNDLE_QT6" in
+    no)
+        echo "[_build] CONFIGURATION_BUNDLE_QT6=no - PySide6 not bundled (translucent Tk fallback)."
+        ;;
+    *)
+        if "$CONFIGURATION_PYTHON" -c "import PySide6" >/dev/null 2>&1; then
+            echo "[_build] PySide6 found - bundling the transparent Qt widget (larger binary)."
+            QT_PLUGIN_OPTION=(--enable-plugin=pyside6)
+        else
+            echo "[_build] note: PySide6 not found - the binary falls back to the translucent Tk widget."
+            echo "[_build]        Install PySide6 in the build Python to enable full transparency."
+        fi
+        ;;
+esac
+
 # --- build with Nuitka (single-file mode) ------------------------------------
-# IMPORTANT: unset CC/CXX so Nuitka's --zig logic takes over. If CC is set in
+# IMPORTANT: unset CC/CXX so Nuitka picks its own backend. If CC is set in
 # the environment (e.g. CC=GCC from a shell profile), Nuitka skips its zig
 # detection and falls back to gcc -> MinGW64, which FATALs on Python 3.13+.
+#
+# C compiler notes (measured 2026-09-06, binary with PySide6+Tk, ~25 MB):
+#   zig cc / system gcc 16 / clang 22 : identical results — 25 MB binary,
+#   ~0.30 s `--version` startup (±0.02 s noise), full functionality. Runtime
+#   is dominated by onefile payload extraction and Python/Qt module imports,
+#   not by the generated C code, so the compiler choice does not matter for
+#   this program. Therefore:
+#     - --zig is used ONLY on Windows (no working MinGW64 backend on
+#       Python 3.14); on Linux/macOS Nuitka's native gcc/clang is faster.
+#     - --lto=yes is NOT used: it gave zero measured benefit and made the
+#       final link take 10+ minutes (LTO over ~650 object files).
+#   Truly "more optimized" would need PGO, which is a Nuitka Commercial
+#   feature.
+case "$(uname -s)" in
+    MSYS*|MINGW*|CYGWIN*|*[Ww]indows*)
+        C_BACKEND_OPTION=(--zig)
+        ;;
+    *)
+        C_BACKEND_OPTION=()
+        ;;
+esac
 echo "[_build] compiling ollama-usage with nuitka (onefile)..."
 unset CC CXX
-python -m nuitka \
+"$CONFIGURATION_PYTHON" -m nuitka \
     --onefile \
-    --zig \
+    "${C_BACKEND_OPTION[@]}" \
     --enable-plugin=tk-inter \
+    --enable-plugin=dill-compat \
     "${TCL_OPTIONS[@]}" \
     "${ICON_OPTION[@]}" \
-    --include-data-files="${ICON}=${ICON}" \
+    "${QT_PLUGIN_OPTION[@]}" \
     --product-name="ollama-usage" \
     --product-version="${WIN_VERSION}" \
     --file-version="${WIN_VERSION}" \
     --file-description="Ollama Cloud quota usage checker" \
-    --output-dir="${OUTPUT_DIR}" \
+    --output-dir="${CONFIGURATION_OUTPUT_DIR}" \
     --output-filename="${OUTPUT_NAME}" \
     --include-package=cryptography \
-    --include-package="${PACKAGE}" \
+    --include-package="${CONFIGURATION_PACKAGE}" \
     --assume-yes-for-downloads \
-    "${ENTRY_POINT}" || { echo "[_build] build FAILED" >&2; exit 1; }
+    "${CONFIGURATION_ENTRY_POINT}" || { echo "[_build] build FAILED" >&2; exit 1; }
+# Note: Nuitka may warn "pyside6: Unwanted import of 'tkinter' that is
+# redundant with 'PySide6'". That is expected and intentional: the binary
+# bundles BOTH backends - the Qt transparent widget AND the Tk fallback
+# widget (used when PySide6 is absent or --background-transparent is off).
+# Do NOT add --nofollow-import-to=tkinter, it would break the Tk widget.
 
-FINAL="${OUTPUT_DIR}/${OUTPUT_NAME}"
+FINAL="${CONFIGURATION_OUTPUT_DIR}/${OUTPUT_NAME}"
 if [ -f "${FINAL}" ]; then
     SIZE=$(ls -lh "${FINAL}" | awk '{print $5}')
     echo ""
@@ -240,6 +358,7 @@ if [ -f "${FINAL}" ]; then
     "${FINAL}" --version
     if [ "$NO_INSTALL" -eq 0 ]; then
         install_binaries
+        install_docs
     else
         echo "[_build] installation skipped (--no-install)"
     fi

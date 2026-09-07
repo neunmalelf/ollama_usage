@@ -1,0 +1,323 @@
+.TH OLLAMA-USAGE 1 "September 2026" "ollama-usage 1.0" "User Commands"
+.SH NAME
+ollama-usage \- check your Ollama Cloud quota usage
+.SH SYNOPSIS
+.B ollama-usage
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B ollama-usage
+reads your Ollama Cloud session cookie from a supported local browser and
+scrapes
+.B https://ollama.com/settings
+to report your current session and weekly quota usage, web search / web fetch
+request counts, and per-model request statistics.
+.PP
+Ollama does not yet expose an official quota endpoint, so this tool is a
+workaround: it reads your
+.B __Secure-session
+cookie and scrapes the settings page.  Once an official API ships, this tool
+will migrate to it.
+.PP
+The default output is a human-readable summary.  Additional output modes
+.PP
+.B plain
+(default) \-\- colored multi-line summary with plan name, session and weekly
+percentages, reset countdowns, web search / web fetch counts and a
+.IR "Models used this week"
+list;
+.B json
+\-\- machine-readable JSON;
+.B minidisplay
+\-\- one compact line; and
+.B minidisplay-horizontal
+\-\- the compact view on stacked lines.
+.PP
+Auto-refresh is enabled by default (every 120 seconds, with a footer showing
+the next refresh time).  Use
+.B \-\-autorefresh-off
+for a single fetch.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show the help message and exit.
+.TP
+.BR \-v ", " \-\-version
+Show the program version and exit.
+.TP
+.B \-\-minidisplay
+Single-line compact output, e.g.:
+.sp
+.nf
+olu (PRO) s: 42.0% (02:46) | w: 77.0% (1d 06:46) ws: 2 wr: 0
+.fi
+.sp
+.RS
+.nf
+olu = ollama usage, (PRO) = your plan name
+s   = session usage,   w = weekly usage (percent used)
+ws  = web search requests this session
+wr  = web fetch requests this session
+.fi
+.RE
+.sp
+Remaining time is shown as [dd] \fIhh:mm\fR (days omitted when zero).  A grey
+(mm:ss) countdown is appended and refreshed in place; disable it with
+.B \-\-autorefresh-off.
+Clears the terminal before showing the line (TTY only).
+.TP
+.B \-\-minidisplay-horizontal
+Multi-line compact output, one item per line:
+.sp
+.nf
+olu (PRO)
+s: 42.0% (02:46)
+w: 77.0% (1d 06:46)
+ws: 2
+wr: 0 [auto-refresh-timer]
+.fi
+.sp
+Clears the terminal before showing the output (TTY only) and refreshes the
+same way by default.
+.TP
+.B \-\-json
+Output the usage as JSON.  The top-level object contains the fields
+.IR plan ,
+.IR session
+(\fIused_pct\fR, \fIresets_at\fR),
+.IR weekly
+(\fIused_pct\fR, \fIresets_at\fR),
+.IR web_search_requests ,
+.IR web_fetch_requests
+and
+.IR models
+(a list of \fI{name, requests}\fR objects).  Fields are
+.B null
+when absent.
+.TP
+.BI \-\-cookie " COOKIE"
+Use a manual
+.B __Secure-session
+cookie value instead of auto-detection.  Useful when browser detection fails.
+.TP
+.BI \-\-browser " " { firefox , chrome , edge , brave , opera }
+Force a specific browser for cookie auto-detection.
+.TP
+.B \-\-debug-firefox-profiles
+Print every Firefox profile location searched, then exit.  Debugging aid for
+cookie auto-detection on macOS/Linux.
+.TP
+.B \-\-reset-settings
+Reset the GUI and widget settings files (see
+.B FILES
+below) and exit.  Deletes
+.B ~/.ollama-usage-gui.cfg
+and
+.B ~/.ollama-usage-widget.cfg
+and restores the defaults on next launch.
+.TP
+.B \-\-autorefresh-off
+Disable continuous refresh (single fetch).  Auto-refresh is on by default.
+.TP
+.BI \-\-autorefresh " " [ SECONDS ]
+Set the refresh interval in SECONDS (default: 120).  Shows a footer with the
+next refresh time.  Passed without a value it uses 120.
+.TP
+.BI \-\-alert " PERCENTAGE"
+Exit with code 1 if session, weekly or web search usage exceeds
+.IR PERCENTAGE .
+Useful for cron jobs and scripts; combine with
+.B \-\-quiet
+to suppress all output.
+.TP
+.B \-\-quiet
+Suppress all output; only set the exit code.  Intended for use with
+.BR \-\-alert .
+.TP
+.B \-\-notify
+Send desktop notifications when session, weekly or web search usage crosses a
+threshold.  Requires the
+.B notify
+extra (py\fIplyer\fR):
+.B pip install "ollama-usage[notify]".
+Two levels are fired: a
+.B warning
+at the configured threshold (default 80%) and a
+.B critical
+notification 15% above it (capped at 100%).  Each level fires once per
+threshold crossing \-\- no spam during auto-refresh.
+.TP
+.BI \-\-notify-threshold " PERCENTAGE"
+Threshold for desktop notifications in PERCENTAGE (default: 80).  Requires
+.BR \-\-notify .
+.TP
+.BI \-\-voice-info-when-session-usage-was-reset " [TEXT]"
+Speak TEXT aloud when the session usage resets while the CLI is running
+(auto-refresh mode).  Default text: "ollama_usage the session usage has been
+reset".  Uses the best speech backend found on the system: Kokoro neural TTS
+(if kokoro-onnx and the model files are installed), Microsoft Edge-TTS (if
+edge-tts is installed), macOS say, Windows PowerShell SAPI, pyttsx3, or the
+Linux CLI tools spd-say, espeak-ng, espeak, festival.  Speech runs in a
+background thread.  No special hardware is needed - any speakers or
+headphones work; the synthesis is pure software.
+.TP
+.BI \-\-voice-info-when-weekly-usage-was-reset " [TEXT]"
+Speak TEXT aloud when the weekly usage resets while the CLI is running
+(auto-refresh mode).  Default text: "ollama_usage the weekly usage has been
+reset".  Same speech backend requirements as
+.BR \-\-voice-info-when-session-usage-was-reset .
+.TP
+.B \-\-widget
+Launch the desktop widget: a small, always-on-top, frameless window showing
+live usage gauges.  Auto-refreshes every 30 seconds, is draggable, right-click
+opens a context menu (refresh now, toggle size, close), and remembers its
+position between runs.  A status indicator in the top-right corner shows the
+auto-refresh state: \fBA\fR by default, \fBM\fR with
+.BR \-\-autorefresh-off ;
+green when the data is fresh, red when an error occurred.  Uses the stdlib
+tkinter toolkit (no extra dependency).
+.TP
+.B \-\-gui
+Launch a simple GUI window (OK and Refresh buttons, dark mode toggle, auto-
+refresh interval field) showing the same quota information.  Uses tkinter.
+.TP
+.BI \-\-theme " " { dark , light , minimal }
+Color scheme used with
+.BR \-\-widget .
+.TP
+.BI \-\-size " " { compact , full }
+Widget size: full shows bars plus countdown, compact shows text only.
+Restores the last used size when omitted.
+.TP
+.BI \-\-opacity " " 0.0\-1.0
+Widget window transparency (default: 0.92; 0.80 with
+\-\-background\-transparent).
+.TP
+.BI \-\-position " " { top\-left , top\-right , bottom\-left , bottom\-right }
+Screen corner to place the widget.  Restores the last used position when
+omitted.
+.TP
+.B \-\-background-transparent
+Make the widget background fully transparent so only the text and bars are
+visible. Native on Windows; on Linux/macOS it requires PySide6 (install
+with pip install ollama\-usage[widget]) and otherwise falls back to a
+translucent window with a warning.
+.TP
+.B \-\-debug
+Enable debug logging.
+.TP
+.BR \-\-daemon ", " \-\-damon
+Run the widget, GUI or auto-refresh loop in the background so the terminal can
+be closed.  Detaches via fork/setsid and redirects stdio to /dev/null.
+.br
+Stop with:
+.sp
+killall ollama_usage            # stops the running instances; the extracted
+                                # onefile payload (process name
+                                # ollama_usage.bi) shuts down a moment later
+pkill -f ollama_usage           # catches every process whose command line matches
+.sp
+On Windows os.fork is unavailable and \-\-daemon is a no-op.
+.SH KEYBOARD SHORTCUTS
+.TP
+.B Ctrl+C
+Stop the CLI (works in every output mode: plain, minidisplay, auto-refresh and
+alert loops); prints "Stopped." and exits.
+.TP
+.B Ctrl+Q
+Close the GUI window and the desktop widget.
+.SH EXAMPLES
+Display current usage (auto-detects the browser):
+.sp
+.nf
+ollama-usage
+.fi
+.PP
+Output as JSON:
+.sp
+.nf
+ollama-usage --json
+.fi
+.PP
+Force a specific browser:
+.sp
+.nf
+ollama-usage --browser firefox
+.fi
+.PP
+Pass the cookie manually:
+.sp
+.nf
+ollama-usage --cookie YOUR_SESSION_COOKIE
+.fi
+.PP
+Alert from a cron job (exit code 1 when usage exceeds 80%, no output):
+.sp
+.nf
+ollama-usage --quiet --alert 80
+.fi
+.PP
+Single-line compact view with a 60-second refresh:
+.sp
+.nf
+ollama-usage --minidisplay --autorefresh 60
+.fi
+.PP
+Notify when usage crosses 75%:
+.sp
+.nf
+ollama-usage --notify --notify-threshold 75
+.fi
+.PP
+Desktop widget in light theme, compact size, bottom-right:
+.sp
+.nf
+ollama-usage --widget --theme light --size compact --position bottom-right
+.fi
+.PP
+Widget in the background:
+.sp
+.nf
+ollama-usage --widget --daemon
+.fi
+.SH EXIT STATUS
+.TP
+.B 0
+Success, or the alert threshold was not exceeded.
+.TP
+.B 1
+An alert threshold was exceeded, or an error occurred (authentication
+failure, network error, parse error, invalid arguments).
+.SH ENVIRONMENT
+.TP
+.B OLLAMA_BROWSER_COOKIE
+Session cookie used instead of browser auto-detection when set.
+.SH FILES
+.TP
+.B ~/.ollama-usage-gui.cfg
+GUI settings (INI-style): window geometry, dark mode, auto-refresh interval.
+.TP
+.B ~/.ollama-usage-widget.cfg
+Widget settings (INI-style): screen position (\fIx\fR, \fIy\fR) and size
+(\fIcompact\fR or \fIfull\fR).
+.SH SECURITY
+The tool reads your local browser cookie database to authenticate against
+ollama.com.  Depending on your operating system and browser, a security prompt
+may appear asking permission to access browser cookies or local browser data.
+This is expected.
+.PP
+The cookie grants access to your Ollama account.  Treat it as a secret: do not
+paste it into issue reports, logs or chat.
+.SH BUGS
+This project is not affiliated with Ollama.  It relies on scraping and may
+break if ollama.com changes its HTML structure.
+.br
+Report issues at:
+.B https://github.com/neunmalelf/ollama_usage/issues
+.SH SEE ALSO
+.BR git (1),
+.BR firefox (1),
+.BR python (1),
+.BR killall (1)
+.PP
+Project repository:
+.B https://github.com/neunmalelf/ollama_usage

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
+
 from unittest.mock import patch, MagicMock
 
 from ollama_usage.cli import (
@@ -553,3 +556,164 @@ class TestAutorefreshSleepHorizontal:
             _autorefresh_sleep_horizontal(2, "olu\ns: x")
         out = capsys.readouterr().out
         assert _ANSI["grey"] + "(2)" + _ANSI["reset"] in out
+
+
+class TestTransparentFallbackNotice:
+    """``--widget --background-transparent`` must warn on non-Windows
+    platforms when PySide6 is missing (Tk cannot do per-pixel transparency
+    there) — from the original process, because the ``--daemon`` child's
+    stderr is /dev/null."""
+
+    def _run_widget(self, argv: list) -> dict:
+        captured = {}
+
+        def fake_launch(**kwargs):
+            captured.update(kwargs)
+
+        with patch("ollama_usage.widget.launch_widget", side_effect=fake_launch), \
+             patch("sys.argv", argv):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        return captured
+
+    def test_notice_when_pyside6_missing(self, capsys) -> None:
+        if sys.platform == "win32":
+            return  # notice is Windows-exclusive; nothing to assert here
+        with patch("ollama_usage.widget.qt_transparency_supported",
+                   return_value=False):
+            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+                              "--cookie", "x"])
+        err = capsys.readouterr().err
+        assert "needs PySide6" in err
+        assert "translucent background instead" in err
+
+    def test_no_notice_when_pyside6_available(self, capsys) -> None:
+        if sys.platform == "win32":
+            return
+        with patch("ollama_usage.widget.qt_transparency_supported",
+                   return_value=True):
+            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+                              "--cookie", "x"])
+        assert "needs PySide6" not in capsys.readouterr().err
+
+    def test_no_notice_without_transparent_flag(self, capsys) -> None:
+        self._run_widget(["ollama-usage", "--widget", "--cookie", "x"])
+        assert "needs PySide6" not in capsys.readouterr().err
+
+    def test_no_notice_on_windows(self, capsys, monkeypatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+                          "--cookie", "x"])
+        assert capsys.readouterr().err == ""
+
+    def test_widget_receives_unresolved_opacity_and_flags(self, capsys) -> None:
+        if sys.platform == "win32":
+            return
+        captured = self._run_widget(
+            ["ollama-usage", "--widget", "--background-transparent",
+             "--theme", "minimal", "--cookie", "x"])
+        capsys.readouterr()
+        assert captured["opacity"] is None  # default resolved inside the widget
+        assert captured["background_transparent"] is True
+        assert captured["theme"] == "minimal"
+
+    def test_explicit_opacity_forwarded(self) -> None:
+        captured = self._run_widget(
+            ["ollama-usage", "--widget", "--opacity", "0.5", "--cookie", "x"])
+        assert captured["opacity"] == 0.5
+
+
+class TestVoiceResetTracker:
+    """Reset detection: a changed resets_at between fetches triggers speech."""
+
+    @staticmethod
+    def _tracker(session="s", weekly="w"):
+        from ollama_usage import cli
+        return cli._VoiceResetTracker(session, weekly)
+
+    def test_first_fetch_sets_baseline_no_speak(self) -> None:
+        with patch("ollama_usage.voice.speak_async") as speak:
+            t = self._tracker()
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            speak.assert_not_called()
+
+    def test_session_reset_speaks(self) -> None:
+        with patch("ollama_usage.voice.speak_async") as speak:
+            t = self._tracker()
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            t.check({"session": {"resets_at": "C"}, "weekly": {"resets_at": "B"}})
+            speak.assert_called_once_with("s")
+
+    def test_weekly_reset_speaks(self) -> None:
+        with patch("ollama_usage.voice.speak_async") as speak:
+            t = self._tracker()
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "D"}})
+            speak.assert_called_once_with("w")
+
+    def test_no_change_no_speak(self) -> None:
+        with patch("ollama_usage.voice.speak_async") as speak:
+            t = self._tracker()
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            speak.assert_not_called()
+
+    def test_no_texts_configured_no_speak(self) -> None:
+        from ollama_usage import cli
+        with patch("ollama_usage.voice.speak_async") as speak:
+            t = cli._VoiceResetTracker(None, None)
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            t.check({"session": {"resets_at": "C"}, "weekly": {"resets_at": "D"}})
+            speak.assert_not_called()
+
+    def test_missing_resets_at_ignored(self) -> None:
+        with patch("ollama_usage.voice.speak_async") as speak:
+            t = self._tracker()
+            t.check({"session": {}, "weekly": {}})
+            t.check({"session": {"resets_at": "A"}, "weekly": {"resets_at": "B"}})
+            speak.assert_not_called()
+
+
+class TestVoiceArgs:
+    """--voice-info-when-*-usage-was-reset parse with default texts."""
+
+    @staticmethod
+    def _parse(argv: list) -> object:
+        import argparse
+        captured = {}
+        original_parse = argparse.ArgumentParser.parse_args
+
+        def fake_parse(self, args=None, namespace=None):
+            captured["args"] = original_parse(self, args, namespace)
+            raise SystemExit(0)
+
+        with patch.object(argparse.ArgumentParser, "parse_args", fake_parse), \
+             patch.object(sys, "argv", ["ollama-usage"] + argv):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        return captured.get("args")
+
+    def test_session_default_text_when_bare(self) -> None:
+        args = self._parse(["--voice-info-when-session-usage-was-reset"])
+        assert args.voice_info_when_session_usage_was_reset == \
+            "ollama_usage the session usage has been reset"
+
+    def test_session_custom_text(self) -> None:
+        args = self._parse(["--voice-info-when-session-usage-was-reset", "custom msg"])
+        assert args.voice_info_when_session_usage_was_reset == "custom msg"
+
+    def test_weekly_default_text_when_bare(self) -> None:
+        args = self._parse(["--voice-info-when-weekly-usage-was-reset"])
+        assert args.voice_info_when_weekly_usage_was_reset == \
+            "ollama_usage the weekly usage has been reset"
+
+    def test_absent_is_none(self) -> None:
+        args = self._parse([])
+        assert args.voice_info_when_session_usage_was_reset is None
+        assert args.voice_info_when_weekly_usage_was_reset is None

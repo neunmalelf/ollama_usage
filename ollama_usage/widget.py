@@ -7,8 +7,10 @@ Requires tkinter (stdlib). On minimal Linux installs:
 from __future__ import annotations
 
 import configparser
+import importlib.util
 import logging
 import pathlib
+import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -104,6 +106,10 @@ _FONT      = "Helvetica"
 #: Sentinel color made fully transparent via ``-transparentcolor``. It must
 #: not collide with any theme color.
 _TRANSPARENT_COLOR = "#000001"
+#: Default whole-window opacity.
+_DEFAULT_OPACITY = 0.92
+#: Default window opacity when ``--background-transparent`` is given.
+_TRANSPARENT_OPACITY = 0.80
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +360,7 @@ class OllamaWidget:
         interval: int   = 30,
         theme: str      = "dark",
         size: str | None = None,
-        opacity: float  = 0.92,
+        opacity: float | None = None,
         background_transparent: bool = False,
         position: str | None = None,
         autorefresh: bool = False,
@@ -364,7 +370,7 @@ class OllamaWidget:
         self._interval    = max(10, interval)
         self._theme       = THEMES.get(theme, THEMES["dark"])
         self._size        = self._resolve_size(size)  # "compact" | "full"
-        self._opacity     = max(0.1, min(1.0, opacity))
+        self._opacity_requested = opacity  # None → resolve at window setup
         self._position    = position   # named anchor or None (restored)
         self._autorefresh = autorefresh  # True → "A" indicator, False → "M"
         self._transparent = background_transparent  # True → no background color
@@ -397,20 +403,37 @@ class OllamaWidget:
         r = self._root
         r.overrideredirect(True)
         r.wm_attributes("-topmost", True)
-        r.wm_attributes("-alpha", self._opacity)
+        # Tk on X11 silently ignores "-alpha" (the readback stays 1.0 and no
+        # _NET_WM_WINDOW_OPACITY property is set) unless a window "-type" has
+        # been set first. "-type" is X11-only and raises TclError on
+        # Windows/macOS, where "-alpha" works natively anyway.
+        try:
+            r.wm_attributes("-type", "normal")
+        except tk.TclError:
+            pass
         self._transparent_supported = False
         if self._transparent:
-            # Make the sentinel color fully transparent. Supported on Windows
-            # and on X11 with a compositor; on Wayland/XWayland Tk may reject
-            # the attribute - fall back to the theme background then.
+            # Make the sentinel color fully transparent. ``-transparentcolor``
+            # is a Windows-only Tk attribute ("layered windows"); on
+            # X11/Wayland Tk rejects it and the widget falls back to a
+            # translucent window instead (Tk cannot do per-pixel alpha there).
             try:
                 r.wm_attributes("-transparentcolor", _TRANSPARENT_COLOR)
                 self._transparent_supported = True
             except tk.TclError:
                 logger.warning(
                     "Widget: -transparentcolor not supported on this display - "
-                    "falling back to the regular theme background"
+                    "falling back to a translucent background"
                 )
+        if self._opacity_requested is not None:
+            opacity = self._opacity_requested
+        elif self._transparent:
+            # --background-transparent implies a more see-through default.
+            opacity = _TRANSPARENT_OPACITY
+        else:
+            opacity = _DEFAULT_OPACITY
+        self._opacity = max(0.1, min(1.0, opacity))
+        r.wm_attributes("-alpha", self._opacity)
         r.configure(bg=self._bg_color())
         r.resizable(False, False)
         r.title("ollama-usage")
@@ -594,6 +617,8 @@ class OllamaWidget:
                 self._error = f"Auth error: {refresh_exc}"
         except OllamaUsageError as exc:
             self._error = str(exc)
+        except Exception as exc:
+            self._error = f"Error: {exc}"
         finally:
             self._is_fetching.clear()  # libère le verrou dans tous les cas
 
@@ -774,12 +799,26 @@ class OllamaWidget:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
+def qt_transparency_supported() -> bool:
+    """Whether a fully transparent widget can be rendered on this machine.
+
+    Tk has no per-pixel transparency on X11/Wayland, so the Qt-based
+    transparent widget (ollama_usage.widget_qt) is used when PySide6 is
+    importable. On Windows the Tk path is natively transparent, so Qt is
+    not needed there.
+    """
+    if sys.platform == "win32":
+        return False
+    return importlib.util.find_spec("PySide6") is not None
+
+
 def launch_widget(
     cookie: str | Callable[[], str],
     interval: int        = 30,
     theme: str           = "dark",
     size: str            = "full",
-    opacity: float       = 0.92,
+    opacity: float | None = None,
     background_transparent: bool = False,
     position: str | None = None,
     autorefresh: bool    = False,
@@ -792,7 +831,8 @@ def launch_widget(
         interval:   Refresh interval in seconds (min 10).
         theme:      "dark" | "light" | "minimal".
         size:       "full" (bars + countdown) | "compact" (text only).
-        opacity:    Window opacity between 0.1 and 1.0.
+        opacity:    Window opacity between 0.1 and 1.0, or None for the
+                    default (0.92; 0.80 when background_transparent is given).
         position:   "top-left" | "top-right" | "bottom-left" | "bottom-right"
                     or None to restore last saved position.
         autorefresh: Whether to show the "A" (autorefresh) indicator; the
@@ -806,6 +846,21 @@ def launch_widget(
             "tkinter is not available. "
             "On Linux, install it with: sudo apt install python3-tk"
         )
+
+    if background_transparent and qt_transparency_supported():
+        # Per-pixel transparent Qt widget (Tk cannot do this on X11/Wayland).
+        from ollama_usage.widget_qt import launch_widget_qt
+
+        launch_widget_qt(
+            cookie=cookie,
+            interval=interval,
+            theme=theme,
+            size=size,
+            opacity=opacity,
+            position=position,
+            autorefresh=autorefresh,
+        )
+        return
 
     OllamaWidget(
         cookie=cookie,

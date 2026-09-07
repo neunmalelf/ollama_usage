@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from ollama_usage.exceptions import AuthError, NetworkError, ParseError
+from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,10 @@ def _fetch_html(cookie: str) -> str:
         raise NetworkError(f"HTTP error {e.code} reaching {_SETTINGS_URL}") from e
     except urllib.error.URLError as e:
         raise NetworkError(f"Failed to reach {_SETTINGS_URL}: {e}") from e
+    except OllamaUsageError:
+        raise
+    except Exception as e:
+        raise NetworkError(f"Unexpected error fetching {_SETTINGS_URL}: {e}") from e
 
 
 def _check_auth(html: str) -> None:

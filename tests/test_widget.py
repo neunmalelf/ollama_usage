@@ -438,3 +438,138 @@ class TestPollFetch:
         mock_thread.assert_called_once()
         assert inst._is_fetching.is_set()
         inst._root.after.assert_called_once_with(50, inst._poll_fetch)
+
+# ---------------------------------------------------------------------------
+# _setup_window / _bg_color — --background-transparent platform fallback
+# ---------------------------------------------------------------------------
+
+class TestSetupWindowTransparency:
+    """``-transparentcolor`` is a Windows-only Tk attribute; everywhere else
+    the widget falls back to the theme background, and the default opacity
+    becomes 0.80 whenever ``--background-transparent`` is given."""
+
+    @staticmethod
+    def _wm_attributes_rejecting(attr, value=None):
+        """Stand-in for a root on X11: every attribute is accepted except
+        the Windows-only -transparentcolor."""
+        if attr == "-transparentcolor":
+            raise w.tk.TclError(f'bad attribute "{attr}"')
+
+    def _inst(self, transparent: bool, opacity=None):
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._root = MagicMock()
+        inst._transparent = transparent
+        inst._opacity_requested = opacity
+        inst._theme = w.THEMES["minimal"]
+        return inst
+
+    @staticmethod
+    def _alpha(root) -> float:
+        alphas = [
+            c.args[1]
+            for c in root.wm_attributes.call_args_list
+            if c.args and c.args[0] == "-alpha"
+        ]
+        assert len(alphas) == 1
+        return alphas[0]
+
+    def test_unsupported_falls_back_to_theme_bg_and_translucent_pill(self) -> None:
+        inst = self._inst(transparent=True)
+        inst._root.wm_attributes.side_effect = self._wm_attributes_rejecting
+        inst._setup_window()
+        assert inst._transparent_supported is False
+        assert inst._bg_color() == w.THEMES["minimal"]["bg"]
+        inst._root.configure.assert_called_once_with(bg=w.THEMES["minimal"]["bg"])
+        assert self._alpha(inst._root) == w._TRANSPARENT_OPACITY
+
+    def test_transparent_default_opacity_applies_even_when_supported(self) -> None:
+        # --background-transparent implies the 0.80 default regardless of
+        # whether per-pixel transparency actually works (Windows native path).
+        inst = self._inst(transparent=True)
+        inst._setup_window()  # MagicMock accepts -transparentcolor
+        assert inst._transparent_supported is True
+        assert inst._bg_color() == w._TRANSPARENT_COLOR
+        assert self._alpha(inst._root) == w._TRANSPARENT_OPACITY
+
+    def test_explicit_opacity_wins_over_fallback_default(self) -> None:
+        inst = self._inst(transparent=True, opacity=0.5)
+        inst._root.wm_attributes.side_effect = self._wm_attributes_rejecting
+        inst._setup_window()
+        assert self._alpha(inst._root) == 0.5
+
+    def test_without_transparent_default_opacity_applies(self) -> None:
+        inst = self._inst(transparent=False)
+        inst._setup_window()
+        assert inst._bg_color() == w.THEMES["minimal"]["bg"]
+        assert self._alpha(inst._root) == w._DEFAULT_OPACITY
+
+    def test_opacity_clamped_to_valid_range(self) -> None:
+        inst = self._inst(transparent=False, opacity=5.0)
+        inst._setup_window()
+        assert self._alpha(inst._root) == 1.0
+
+    def test_topmost_and_frameless_set(self) -> None:
+        inst = self._inst(transparent=True)
+        inst._setup_window()
+        inst._root.overrideredirect.assert_called_once_with(True)
+        topmost = [
+            c
+            for c in inst._root.wm_attributes.call_args_list
+            if c.args and c.args[0] == "-topmost"
+        ]
+        assert topmost and topmost[0].args[1] is True
+
+    def test_window_type_set_before_alpha(self) -> None:
+        # Tk on X11 silently ignores -alpha unless -type was set first,
+        # so the ordering of the wm_attributes calls is part of the contract.
+        inst = self._inst(transparent=True)
+        inst._setup_window()
+        attrs = [c.args[0] for c in inst._root.wm_attributes.call_args_list
+                 if c.args and c.args[0] in ("-type", "-alpha")]
+        assert attrs.index("-type") < attrs.index("-alpha")
+
+
+# ---------------------------------------------------------------------------
+# launch_widget — Qt (transparent) vs Tk backend dispatch
+# ---------------------------------------------------------------------------
+
+class TestLaunchDispatch:
+    """``--background-transparent`` uses the PySide6 widget when possible;
+    everything else uses the Tk widget."""
+
+    @staticmethod
+    def _launch(**kwargs):
+        kwargs.setdefault("cookie", "x")
+        with patch("ollama_usage.widget.check_dependencies"):
+            w.launch_widget(**kwargs)
+
+    def test_transparent_uses_qt_when_supported(self) -> None:
+        qt_mod = MagicMock()
+        with patch.object(w, "qt_transparency_supported", return_value=True), \
+             patch.dict("sys.modules", {"ollama_usage.widget_qt": qt_mod}), \
+             patch.object(w, "OllamaWidget") as tk_cls:
+            self._launch(background_transparent=True)
+        qt_mod.launch_widget_qt.assert_called_once()
+        assert qt_mod.launch_widget_qt.call_args.kwargs["cookie"] == "x"
+        assert "background_transparent" not in qt_mod.launch_widget_qt.call_args.kwargs
+        tk_cls.assert_not_called()
+
+    def test_transparent_falls_back_to_tk_when_no_qt(self) -> None:
+        with patch.object(w, "qt_transparency_supported", return_value=False), \
+             patch.object(w, "OllamaWidget") as tk_cls:
+            self._launch(background_transparent=True, theme="minimal")
+        tk_cls.assert_called_once()
+        self._assert_call_kwargs(tk_cls, theme="minimal",
+                                 background_transparent=True)
+
+    def test_without_transparent_always_tk(self) -> None:
+        with patch.object(w, "qt_transparency_supported", return_value=True), \
+             patch.object(w, "OllamaWidget") as tk_cls:
+            self._launch(background_transparent=False)
+        tk_cls.assert_called_once()
+
+    @staticmethod
+    def _assert_call_kwargs(mock, **expected):
+        kwargs = mock.call_args.kwargs
+        for key, value in expected.items():
+            assert kwargs[key] == value, f"{key}: {kwargs.get(key)!r} != {value!r}"
