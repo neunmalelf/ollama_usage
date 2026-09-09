@@ -1,7 +1,7 @@
 ---
 name: _update_documention
 description: After each change, checks README.md, README_tecdocu.md (if it exists), function_usage (help function), docs, history.md, man file, and tldr file, updates their version numbers and content, and commits with '<version> - documentation updated'.
-version: 1.0.20260906133143
+version: 1.0.20260906133143Z
 load: always
 ---
 
@@ -30,9 +30,10 @@ After any change to the project:
 
 ### 1. Determine Current Version
 
-Obtain the current GMT+1 timestamp:
+The version micro segment is a **UTC** timestamp with a trailing `Z`
+(format `MAJOR.MINOR.YYYYMMDDhhmmssZ`), independent of the local timezone:
 ```bash
-VERSION=$(TZ=Europe/Berlin date '+%Y%m%d%H%M%S')
+VERSION=$(date -u +'%Y%m%d%H%M%S')Z
 ```
 
 ### 2. Inspect & Update Documentation Assets
@@ -85,7 +86,7 @@ git commit -m "<version> - documentation updated"
 ```
 Example:
 ```bash
-git commit -m "20260906133143 - documentation updated"
+git commit -m "20260906133143Z - documentation updated"
 ```
 
 ---

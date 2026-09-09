@@ -3,7 +3,7 @@
 # symlinked, so it works on Windows without developer-mode symlinks).
 # Run from anywhere inside the repo:  bash hooks/install.sh
 
-__VERSION__="1.0.20260804131917"
+__VERSION__="1.0.20260804131917Z"
 
 set -euo pipefail
 
