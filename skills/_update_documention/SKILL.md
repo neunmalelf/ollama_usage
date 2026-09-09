@@ -33,7 +33,7 @@ After any change to the project:
 The version micro segment is a **UTC** timestamp with a trailing `Z`
 (format `MAJOR.MINOR.YYYYMMDDhhmmssZ`), independent of the local timezone:
 ```bash
-VERSION=$(date -u +'%Y%m%d%H%M%S')Z
+VERSION=$(timestamp)
 ```
 
 ### 2. Inspect & Update Documentation Assets

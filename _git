@@ -81,7 +81,7 @@ done
 # Versions and history/commit timestamps use UTC with a trailing Z, the same
 # convention as the project version micro (MAJOR.MINOR.YYYYMMDDhhmmssZ). Use
 # `date -u` so it is timezone-independent inside scripts/MSYS/Git Bash.
-ts="$(date -u +'%Y%m%d%H%M%S')Z"
+ts="$(timestamp)"
 if [ -n "$comment" ]; then
     message="${ts} ${comment}"
 else
