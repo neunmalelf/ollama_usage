@@ -3,7 +3,7 @@
 # Python files (dd.py, dd_utils.py, ...). Installed into .git/hooks/ via
 # `bash hooks/install.sh` — re-run the installer after editing this file.
 
-__VERSION__="1.1.20260804132124"
+__VERSION__="1.1.20260804132124Z"
 
 set -euo pipefail
 
