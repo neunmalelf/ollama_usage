@@ -110,9 +110,9 @@ cookie auto-detection on macOS/Linux.
 Reset the GUI and widget settings files (see
 .B FILES
 below) and exit.  Deletes
-.B ~/.ollama-usage-gui.cfg
+.B ~/.config/ollama_usage/gui.cfg
 and
-.B ~/.ollama-usage-widget.cfg
+.B ~/.config/ollama_usage/widget.cfg
 and restores the defaults on next launch.
 .TP
 .B \-\-autorefresh-off
@@ -181,9 +181,16 @@ Launch a simple GUI window (OK and Refresh buttons, dark mode toggle, auto-
 refresh interval field) showing the same quota information.  Uses tkinter.
 .TP
 .BI \-\-theme " " { dark , light , minimal }
-Color scheme used with
-.BR \-\-widget .
-.TP
+Color scheme for
+.B \-\-widget
+and
+.BR \-\-gui .
+With
+.B \-\-theme
+dark the GUI starts in dark mode, with light/minimal in light mode; without
+the flag the GUI restores its saved darkmode setting (the widget defaults
+to dark).
+
 .BI \-\-size " " { compact , full }
 Widget size: full shows bars plus countdown, compact shows text only.
 Restores the last used size when omitted.
@@ -293,10 +300,10 @@ failure, network error, parse error, invalid arguments).
 Session cookie used instead of browser auto-detection when set.
 .SH FILES
 .TP
-.B ~/.ollama-usage-gui.cfg
-GUI settings (INI-style): window geometry, dark mode, auto-refresh interval.
+.B ~/.config/ollama_usage/gui.cfg
+GUI settings (INI-style): dark mode, auto-refresh interval.
 .TP
-.B ~/.ollama-usage-widget.cfg
+.B ~/.config/ollama_usage/widget.cfg
 Widget settings (INI-style): screen position (\fIx\fR, \fIy\fR) and size
 (\fIcompact\fR or \fIfull\fR).
 .SH SECURITY

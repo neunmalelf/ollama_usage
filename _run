@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Run the non-compiled (source) version of the GUI. Extra CLI arguments are
+# forwarded, e.g. `./_run --autorefresh-off`.
+cd "$(dirname "$0")"
+python3 -m ollama_usage --gui --browser firefox --autorefresh 120 "$@"

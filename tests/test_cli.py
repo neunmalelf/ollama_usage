@@ -271,14 +271,14 @@ class TestCLIColoration:
     @patch("ollama_usage.cli._HAS_COLOR", new=True)
     def test_color_disabled_on_non_tty(self, mock_isatty) -> None:
         from ollama_usage.cli import _color_pct
-        assert _color_pct(50.0) == " 50.0%"
+        assert _color_pct(50.0) == " 50.0 %"
 
     @patch("ollama_usage.cli.sys.stdout.isatty", return_value=True)
     @patch.dict("os.environ", {"NO_COLOR": "1"})
     @patch("ollama_usage.cli._HAS_COLOR", new=True)
     def test_color_disabled_on_no_color_env(self, mock_isatty) -> None:
         from ollama_usage.cli import _color_pct
-        assert _color_pct(50.0) == " 50.0%"
+        assert _color_pct(50.0) == " 50.0 %"
 
     @patch("ollama_usage.cli.sys.stdout.isatty", return_value=True)
     @patch.dict("os.environ", {}, clear=True)
@@ -289,7 +289,7 @@ class TestCLIColoration:
         # in the label color.
         expected = (
             _ANSI["yellow"] + " 75.0" + _ANSI["reset"]
-            + _ANSI["white"] + "%" + _ANSI["reset"]
+            + _ANSI["white"] + " %" + _ANSI["reset"]
         )
         assert _color_pct(75.0) == expected
 
@@ -419,8 +419,8 @@ class TestMiniLine:
     def test_plain_output(self) -> None:
         data = make_data(42.0, 77.0, web_search_requests=2)
         line = _mini_line(data, use_color=False)
-        assert line.startswith("olu (FREE) s:  42.0% (")
-        assert " | w:  77.0% (" in line
+        assert line.startswith("olu (FREE) s:  42.0 % (")
+        assert " | w:  77.0 % (" in line
         assert " ws: 2 wr: 0" in line
     def test_web_fetch_shown_when_present(self) -> None:
         data = make_data(42.0, 77.0, web_fetch_requests=5)
@@ -452,8 +452,8 @@ class TestMiniHorizontal:
         lines = out.split("\n")
         assert len(lines) == 5
         assert lines[0] == "olu (FREE)"
-        assert lines[1].startswith("s:  42.0% (")
-        assert lines[2].startswith("w:  77.0% (")
+        assert lines[1].startswith("s:  42.0 % (")
+        assert lines[2].startswith("w:  77.0 % (")
         assert lines[3] == "ws: 2"
         assert lines[4] == "wr: 0"
 
@@ -495,7 +495,7 @@ class TestDisplayMinidisplay:
         out = capsys.readouterr().out
         assert out.count("\n") == 5
         assert out.startswith("olu (FREE)")
-        assert "\ns:  42.0% (" in out
+        assert "\ns:  42.0 % (" in out
         assert "\nws: 2\nwr: 0" in out
 
 
@@ -537,7 +537,7 @@ class TestAutorefreshSleepHorizontal:
         mock_sleep.assert_called_once_with(120)
 
     def test_writes_block_and_countdown(self, capsys) -> None:
-        block = "olu (free)\ns:  42.0% (00:00)\nw:  77.0% (00:00)\nwr: 2"
+        block = "olu (free)\ns:  42.0 % (00:00)\nw:  77.0 % (00:00)\nwr: 2"
         with patch("ollama_usage.cli.sys.stdout.isatty", return_value=True), \
              patch("ollama_usage.cli.time.sleep"), \
              patch.dict("os.environ", {"NO_COLOR": "1"}):
@@ -556,6 +556,50 @@ class TestAutorefreshSleepHorizontal:
             _autorefresh_sleep_horizontal(2, "olu\ns: x")
         out = capsys.readouterr().out
         assert _ANSI["grey"] + "(2)" + _ANSI["reset"] in out
+
+
+class TestGuiThemeWiring:
+    """``--theme`` must drive the GUI darkmode; without the flag the GUI
+    restores its saved darkmode setting (widget keeps its dark default)."""
+
+    def _run_gui(self, argv: list) -> dict:
+        captured = {}
+
+        def fake_launch(**kwargs):
+            captured.update(kwargs)
+
+        with patch("ollama_usage.gui.launch_gui", side_effect=fake_launch), \
+             patch("sys.argv", argv):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        return captured
+
+    def test_theme_dark_forces_gui_darkmode(self) -> None:
+        captured = self._run_gui(
+            ["ollama-usage", "--gui", "--theme", "dark", "--cookie", "x"])
+        assert captured["dark"] is True
+
+    def test_theme_light_forces_gui_light(self) -> None:
+        captured = self._run_gui(
+            ["ollama-usage", "--gui", "--theme", "light", "--cookie", "x"])
+        assert captured["dark"] is False
+
+    def test_no_theme_restores_saved_darkmode(self) -> None:
+        captured = self._run_gui(["ollama-usage", "--gui", "--cookie", "x"])
+        assert captured["dark"] is None
+
+    def test_widget_defaults_to_dark_without_theme(self) -> None:
+        with patch("ollama_usage.widget.launch_widget") as mock_launch, \
+             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x"]):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        assert mock_launch.call_args.kwargs["theme"] == "dark"
 
 
 class TestTransparentFallbackNotice:

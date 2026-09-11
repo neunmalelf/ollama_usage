@@ -2,26 +2,28 @@
 
 ## Settings files
 
-The GUI and widget keep separate settings files in the user home directory:
+The GUI and widget keep separate settings files in `~/.config/ollama_usage/`.
+The directory is created automatically on first start; dotted settings files
+from earlier releases (`~/.ollama-usage-gui.cfg`, `~/.ollama-usage-widget.cfg`
+directly in the home directory) are moved there automatically on first start
+after the upgrade:
 
-- GUI: `~/.ollama-usage-gui.cfg`
-  - `geometry`: window size and position, such as `640x300+100+50`
+- GUI: `~/.config/ollama_usage/gui.cfg`
   - `darkmode`: whether dark mode is enabled (`true` or `false`)
   - `autorefresh`: refresh interval in seconds
-- Widget: `~/.ollama-usage-widget.cfg`
+- Widget: `~/.config/ollama_usage/widget.cfg`
   - `x`: horizontal screen position
   - `y`: vertical screen position
   - `size`: `compact` or `full`
 
-These paths use the current user’s home directory; no username or profile path
-is hardcoded. Both files use INI-style CFG syntax. Existing settings are preserved
-independently between GUI and widget.
+These paths are derived from the current user's home directory; no username
+or profile path is hardcoded. Both files use INI-style CFG syntax. Existing
+settings are preserved independently between GUI and widget.
 
 Example GUI CFG:
 
 ```ini
 [gui]
-geometry = 640x300
 darkmode = false
 autorefresh = 120
 ```
@@ -184,8 +186,8 @@ ollama-usage --help
 ### Example output
 ```
 Plan     :  PRO
-Session  :   2.6% used - reset at 2026-08-05T20:00:00Z (in  2h 42m)
-Weekly   :   1.9% used - reset at 2026-08-10T00:00:00Z (in  4d 6h 42m)
+Session  :   2.6 % used - reset at 2026-08-05T20:00:00Z (in  2h 42m)
+Weekly   :   1.9 % used - reset at 2026-08-10T00:00:00Z (in  4d 6h 42m)
 WebSearch:      2 requests
 WebFetch :      0 requests
 Model calls this week:
@@ -197,22 +199,22 @@ Model calls this week:
 
 ### Minidisplay output
 ```
-olu (PRO) s:   2.6% (02:46) | w:   1.9% (1d 06:46) ws: 2 wr: 0
+olu (PRO) s:   2.6 % (02:46) | w:   1.9 % (1d 06:46) ws: 2 wr: 0
 ```
 
-`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). By default a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line (disable with `--autorefresh-off`). When stdout is a terminal, `--minidisplay` clears the screen first so only the line is visible — not the previous prompt.
+`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). By default a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line (disable with `--autorefresh-off`).
 
 `--minidisplay-horizontal` shows the same information, but each item on its own line:
 
 ```
 olu (PRO)
-s:   2.6% (02:46)
-w:   1.9% (1d 06:46)
+s:   2.6 % (02:46)
+w:   1.9 % (1d 06:46)
 ws:  2
 wr:  0
 ```
 
-It clears the terminal before showing the output (TTY only) and refreshes the same way by default, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
+It refreshes in place by default, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
 
 The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `WebFetch :` line reports the number of web fetch requests the same way. The `Models used this week:` section lists per-model request counts. All only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
 
@@ -398,7 +400,7 @@ launch_gui(cookie=get_cookie_auto)
 
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
-| `--theme` | `dark`, `light`, `minimal` | `dark` | Color scheme |
+| `--theme` | `dark`, `light`, `minimal` | *(widget: `dark`; GUI: saved darkmode)* | Color scheme for the widget and the GUI (`--theme dark` forces GUI dark mode, `light`/`minimal` force light) |
 | `--size` | `full`, `compact` | `full` | `full` shows bars + countdown; `compact` shows text only |
 | `--opacity` | `0.1` – `1.0` | `0.92` | Window opacity (`0.80` with `--background-transparent`) |
 | `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |

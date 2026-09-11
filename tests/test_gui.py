@@ -10,15 +10,13 @@ from ollama_usage.gui import (
     build_segments,
     _seconds_until,
     _fmt_countdown,
-    _load_geometry,
-    _save_geometry,
     _load_darkmode,
     _save_darkmode,
     _load_autorefresh,
     _save_autorefresh,
     _DEFAULT_AUTOREFRESH,
+    _max_text_lines,
     _theme_colors,
-    _DEFAULT_GEOMETRY,
     COLORS,
     APP_NAME,
 )
@@ -68,8 +66,8 @@ class TestBuildLines:
     def test_session_and_weekly_percentages(self) -> None:
         lines = build_lines(make_data(session_pct=2.6, weekly_pct=1.9))
         text = "\n".join(lines)
-        assert "2.6%" in text
-        assert "1.9%" in text
+        assert "2.6 %" in text
+        assert "1.9 %" in text
 
     def test_web_search_omitted_when_absent(self) -> None:
         lines = build_lines(make_data())
@@ -214,9 +212,11 @@ class TestBuildSegments:
         # (the '%' column).
         session_text = _seg_text(session_line)
         model_text = _seg_text(model_line)
-        pct_right = session_text.index("%")
+        # The model number's right edge aligns with the percentage's number
+        # right edge (the '%' sign sits one space after it).
+        pct_num_right = session_text.index("2.6") + len("2.6")
         model_right = model_text.index("2") + 1
-        assert pct_right == model_right
+        assert pct_num_right == model_right
 
     def test_countdown_hours_cyan_minutes_magenta(self) -> None:
         segs = build_segments(make_data(session_pct=2.6))
@@ -273,13 +273,19 @@ class TestCountdown:
 # OllamaGui Ã¢â‚¬â€ window wiring (tkinter mocked, no display needed)
 # ---------------------------------------------------------------------------
 
+class _FakeFont:
+    def metrics(self, *args, **kwargs):
+        return 17
+
+
 def _make_gui(data: dict | None = None, error: str | None = None,
-              dark: bool | None = None):
+              dark: bool | None = None, force_dark: bool | None = None):
     """Build an OllamaGui with a mocked tkinter root and a stubbed fetch.
 
     Returns (gui, fake_root, fake_text, button_mock).
     """
     fake_root = MagicMock()
+    fake_root.winfo_screenheight.return_value = 1080
     fake_text = MagicMock()
     fake_button = MagicMock()
     fake_frame = MagicMock()
@@ -301,11 +307,11 @@ def _make_gui(data: dict | None = None, error: str | None = None,
          patch("ollama_usage.gui.tk.Label", return_value=fake_label), \
          patch("ollama_usage.gui.tk.Entry", return_value=fake_entry), \
          patch("ollama_usage.gui.tk.StringVar", return_value=fake_string) as string_mock, \
-         patch("ollama_usage.gui._load_geometry", return_value=None), \
          patch("ollama_usage.gui._load_darkmode", side_effect=_load_dark), \
+         patch("ollama_usage.gui.tkfont.nametofont", return_value=_FakeFont()), \
          patch("ollama_usage.gui._load_autorefresh", return_value=120):
         from ollama_usage.gui import OllamaGui
-        gui = OllamaGui(cookie="fake-cookie")
+        gui = OllamaGui(cookie="fake-cookie", dark=force_dark)
         gui._data = data
         gui._error = error
         return gui, fake_root, fake_text, btn_mock, check_mock, string_mock
@@ -318,6 +324,15 @@ class TestOllamaGui:
         gui, fake_root, _, _, _, _ = _make_gui()
         expected = f"{APP_NAME} ({__version__})"
         fake_root.title.assert_called_once_with(expected)
+
+    def test_force_dark_parameter_overrides_saved(self) -> None:
+        gui, fake_root, fake_text, _, _, _ = _make_gui(force_dark=True)
+        assert gui._dark is True
+        assert gui._bg == "#000000"
+        gui, fake_root, fake_text, _, _, _ = _make_gui(force_dark=False)
+        assert gui._dark is False
+        assert gui._bg == "#ffffff"
+
     def test_ctrl_q_binds_to_quit(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
         binds = [c.args[0] for c in fake_root.bind.call_args_list]
@@ -336,7 +351,9 @@ class TestOllamaGui:
 
     def test_ok_button_quits(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
-        with patch("ollama_usage.gui.sys.exit") as mock_exit:
+        with patch("ollama_usage.gui.sys.exit") as mock_exit, \
+             patch("ollama_usage.gui._save_darkmode"), \
+             patch.object(gui, "_save_autorefresh_from_field"):
             gui._quit()
         fake_root.destroy.assert_called_once()
         # _quit destroys the root and lets the mainloop exit naturally; it
@@ -357,8 +374,8 @@ class TestOllamaGui:
         gui._redraw()
         fake_text.delete.assert_called_once_with("1.0", "end")
         inserted = "".join(c.args[1] for c in fake_text.insert.call_args_list)
-        assert "2.6%" in inserted
-        assert "1.9%" in inserted
+        assert "2.6 %" in inserted
+        assert "1.9 %" in inserted
 
     def test_redraw_shows_error(self) -> None:
         gui, fake_root, fake_text, _, _, _ = _make_gui(error="Network error")
@@ -456,46 +473,23 @@ class TestOllamaGui:
         bound = [c.args[0] for c in fake_root.bind.call_args_list]
         assert "<Escape>" in bound
 
-    def test_quit_saves_geometry(self) -> None:
+    def test_window_is_not_resizable_and_never_force_sized(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
-        fake_root.geometry.return_value = "560x300+10+10"
-        with patch("ollama_usage.gui._save_geometry") as mock_save, \
-             patch("ollama_usage.gui.sys.exit"):
-            gui._quit()
-        mock_save.assert_called_once_with("560x300+10+10")
+        # Fixed window: the content auto-fits, nothing is force-sized.
+        fake_root.resizable.assert_called_once_with(False, False)
+        fake_root.geometry.assert_not_called()
 
-    def test_geometry_restored_from_state(self) -> None:
-        gui, fake_root, _, _, _, _ = _make_gui()
-        # _load_geometry is patched to return None in _make_gui, so geometry
-        # falls back to the default. Verify the default is applied.
-        fake_root.geometry.assert_called_once_with(_DEFAULT_GEOMETRY)
+    def test_redraw_fits_text_height_to_content(self) -> None:
+        data = make_data(session_pct=2.6, weekly_pct=1.9)
+        gui, fake_root, fake_text, _, _, _ = _make_gui(data=data)
+        gui._redraw()
+        fake_text.configure.assert_called_with(
+            height=len(build_segments(data)))
 
+    def test_max_text_lines_clamps_to_screen(self) -> None:
+        assert _max_text_lines(1080, 17) == (1080 - 220) // 17
+        assert _max_text_lines(200, 17) == 6  # floor: never below 6 lines
 
-# ---------------------------------------------------------------------------
-# Geometry persistence helpers
-# ---------------------------------------------------------------------------
-
-class TestGeometryPersistence:
-
-    def test_save_then_load_roundtrip(self, tmp_path, monkeypatch) -> None:
-        import ollama_usage.gui as gui_mod
-        state_file = tmp_path / "state.json"
-        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
-        _save_geometry("600x400+20+30")
-        assert _load_geometry() == "600x400+20+30"
-
-    def test_load_returns_none_when_missing(self, tmp_path, monkeypatch) -> None:
-        import ollama_usage.gui as gui_mod
-        state_file = tmp_path / "missing.json"
-        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
-        assert _load_geometry() is None
-
-    def test_load_returns_none_on_corrupt(self, tmp_path, monkeypatch) -> None:
-        import ollama_usage.gui as gui_mod
-        state_file = tmp_path / "state.json"
-        state_file.write_text("not json", encoding="utf-8")
-        monkeypatch.setattr(gui_mod, "_STATE_FILE", state_file)
-        assert _load_geometry() is None
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +553,7 @@ class TestDarkMode:
     def test_quit_saves_darkmode(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
         with patch("ollama_usage.gui._save_darkmode") as mock_save, \
-             patch("ollama_usage.gui._save_geometry"), \
+             patch.object(gui, "_save_autorefresh_from_field"), \
              patch("ollama_usage.gui.sys.exit"):
             gui._quit()
         mock_save.assert_called_once_with(gui._dark)
@@ -580,7 +574,9 @@ class TestDarkMode:
         # keep the checkbox indicator visible (fixed selectcolor).
         gui, fake_root, fake_text, _, check_mock, _ = _make_gui()
         gui._dark_var.get.return_value = True
-        gui._toggle_dark()  # must not raise
+        with patch("ollama_usage.gui._save_darkmode"), \
+             patch.object(gui, "_redraw"):
+            gui._toggle_dark()  # must not raise
         assert gui._dark is True
         # selectcolor is set to a fixed contrasting color (not the background).
         gui._dark_ck.configure.assert_any_call(selectcolor="#666666")
@@ -588,7 +584,9 @@ class TestDarkMode:
     def test_toggle_dark_off_keeps_checkbox_visible(self) -> None:
         gui, fake_root, fake_text, _, check_mock, _ = _make_gui()
         gui._dark_var.get.return_value = False
-        gui._toggle_dark()  # must not raise
+        with patch("ollama_usage.gui._save_darkmode"), \
+             patch.object(gui, "_redraw"):
+            gui._toggle_dark()  # must not raise
         assert gui._dark is False
         gui._dark_ck.configure.assert_any_call(selectcolor="#666666")
 
@@ -646,7 +644,6 @@ class TestAutorefresh:
     def test_quit_saves_autorefresh(self) -> None:
         gui, fake_root, _, _, _, _ = _make_gui()
         with patch.object(gui, "_save_autorefresh_from_field") as mock_save, \
-             patch("ollama_usage.gui._save_geometry"), \
              patch("ollama_usage.gui._save_darkmode"), \
              patch("ollama_usage.gui.sys.exit"):
             gui._quit()
