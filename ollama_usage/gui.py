@@ -10,12 +10,15 @@ from __future__ import annotations
 import configparser
 import logging
 import pathlib
+import re
 import sys
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from datetime import datetime, timezone
 from typing import Callable
 
+from ollama_usage import config
 from ollama_usage import __version__ as _pkg_version
 from ollama_usage.cli import _next_refresh_timestamp
 from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError
@@ -65,15 +68,18 @@ def _resolve_icon() -> pathlib.Path:
 # checkout, an installed package, and frozen (PyInstaller/Nuitka) builds.
 _ICON_PATH = _resolve_icon()
 
-# GUI-only settings file.
-_STATE_FILE = pathlib.Path.home() / ".ollama-usage-gui.cfg"
+# GUI-only settings file (in ~/.config/ollama_usage/, created on first start).
+_STATE_FILE = config.GUI_CFG
 
-# Default window geometry (width x height). The width is chosen so the
-# Session / Weekly lines (with their full ISO reset timestamps) are not
-# truncated or wrapped.
-_DEFAULT_GEOMETRY = "640x300"
-_MIN_WIDTH = 360
-_MIN_HEIGHT = 200
+# The window auto-sizes to its content (text + buttons) and is not
+# resizable — the content always fits (see _redraw), and the other viewing
+# modes (CLI minidisplay, desktop widget) cover every other need.
+# _redraw clamps the text height to the screen.
+
+def _max_text_lines(screen_height: int, line_pixels: int) -> int:
+    """Text height cap so the window stays inside the screen."""
+    return max(6, (screen_height - 220) // line_pixels)
+
 
 # ---------------------------------------------------------------------------
 # Display content (pure, testable — no tkinter dependency)
@@ -120,14 +126,14 @@ def build_lines(data: dict | None, error: str | None = None) -> list[str]:
         pct = session.get("used_pct", 0.0)
         resets = session.get("resets_at", "")
         lines.append(
-            f"Session  : {pct:.1f}% used - reset at {resets}"
+            f"Session  : {pct:.1f} % used - reset at {resets}"
             f" (in {_fmt_countdown(_seconds_until(resets))})"
         )
     if weekly:
         pct = weekly.get("used_pct", 0.0)
         resets = weekly.get("resets_at", "")
         lines.append(
-            f"Weekly   : {pct:.1f}% used - reset at {resets}"
+            f"Weekly   : {pct:.1f} % used - reset at {resets}"
             f" (in {_fmt_countdown(_seconds_until(resets))})"
         )
 
@@ -178,15 +184,16 @@ COLORS: dict[str, str] = {
     "grey":    "#808080",
 }
 
-# On a light (white) background the cyan and white colors are hard to read,
-# so they are substituted: cyan -> blue, white -> near-black, and green and
-# grey are darkened for better contrast on white.
+#: On a light (white) background bright colors are hard to read, so they
+#: are substituted: cyan -> blue, yellow -> dark amber, white -> near-black,
+#: and green and grey are darkened for better contrast on white.
 _LIGHT_COLORS: dict[str, str] = {
     **COLORS,
-    "cyan":  "#0000ff",
-    "white": "#1a1a1a",
-    "green": "#008000",
-    "grey":  "#404040",
+    "cyan":   "#0000ff",
+    "yellow": "#a05a00",
+    "white":  "#1a1a1a",
+    "green":  "#008000",
+    "grey":   "#404040",
 }
 
 #: Background / foreground colors per mode.
@@ -267,7 +274,7 @@ def build_segments(
         line: list[tuple[str, str | None]] = [
             ("Session  : ", None),
             (f"{pct:>5.1f}", _pct_color_name(pct)),
-            ("%", _LABEL_COLOR),
+            (" %", _LABEL_COLOR),
             (" used - reset at ", None),
             (resets, None),
             (" (in ", None),
@@ -282,7 +289,7 @@ def build_segments(
         line = [
             ("Weekly   : ", None),
             (f"{pct:>5.1f}", _pct_color_name(pct)),
-            ("%", _LABEL_COLOR),
+            (" %", _LABEL_COLOR),
             (" used - reset at ", None),
             (resets, None),
             (" (in ", None),
@@ -346,25 +353,13 @@ def _save_state(state: dict) -> None:
     try:
         parser = configparser.ConfigParser()
         parser["gui"] = {key: str(value) for key, value in state.items()}
+        config.ensure_config_dir()
         with _STATE_FILE.open("w", encoding="utf-8") as stream:
             parser.write(stream)
     except Exception:
         logger.debug("Could not save GUI state: %s", _STATE_FILE)
 
 
-def _load_geometry() -> str | None:
-    """Return the saved window geometry string, or None if unavailable."""
-    geom = _load_state().get("geometry")
-    if isinstance(geom, str) and geom:
-        return geom
-    return None
-
-
-def _save_geometry(geometry: str) -> None:
-    """Persist the current window geometry (size + position) to disk."""
-    state = _load_state()
-    state["geometry"] = geometry
-    _save_state(state)
 
 
 def _load_darkmode() -> bool:
@@ -416,25 +411,22 @@ class OllamaGui:
         self,
         cookie: str | Callable[[], str],
         title: str | None = None,
+        dark: bool | None = None,
     ) -> None:
         self._cookie_fn = cookie if callable(cookie) else lambda: cookie
         self._cookie = self._cookie_fn()
         self._data: dict | None = None
         self._error: str | None = None
         self._is_fetching = threading.Event()
-        self._dark = _load_darkmode()
+        self._dark = _load_darkmode() if dark is None else bool(dark)
         self._colors = _theme_colors(self._dark)
         self._bg, self._fg = _BG_FG[self._dark].values()
 
         self._root = tk.Tk()
         self._root.title(title or f"{APP_NAME} ({_pkg_version})")
-        self._root.resizable(True, True)
-        self._root.minsize(_MIN_WIDTH, _MIN_HEIGHT)
+        self._root.resizable(False, False)
         self._set_icon()
         bind_quit(self._root, lambda _e: self._quit())
-
-        saved = _load_geometry()
-        self._root.geometry(saved or _DEFAULT_GEOMETRY)
 
         self._text = tk.Text(
             self._root,
@@ -447,6 +439,9 @@ class OllamaGui:
             bg=self._bg,
             fg=self._fg,
         )
+        # Cached once: the text line height in pixels (for the screen clamp).
+        self._font_linespace = tkfont.nametofont(
+            self._text.cget("font")).metrics("linespace")
         self._text.pack(fill="both", expand=True, padx=8, pady=8)
 
         # Configure one text tag per color so segments can be colored.
@@ -629,7 +624,8 @@ class OllamaGui:
 
     def _redraw(self) -> None:
         self._text.delete("1.0", tk.END)
-        for line in build_segments(self._data, self._error):
+        lines = build_segments(self._data, self._error)
+        for line in lines:
             start = self._text.index("end-1c")
             for text, color in line:
                 self._text.insert("end", text)
@@ -638,14 +634,15 @@ class OllamaGui:
                     self._text.tag_add(color, start, end)
                 start = self._text.index("end-1c")
             self._text.insert("end", "\n")
+        # Size the text widget to the content so the window fits all lines
+        self._text.configure(
+            height=min(len(lines), _max_text_lines(
+                self._root.winfo_screenheight(), self._font_linespace))
+        )
 
     # ---------------------------------------------------------------- run
 
     def _quit(self) -> None:
-        try:
-            _save_geometry(self._root.geometry())
-        except Exception:
-            pass
         try:
             _save_darkmode(self._dark)
         except Exception:
@@ -670,12 +667,15 @@ class OllamaGui:
 def launch_gui(
     cookie: str | Callable[[], str],
     title: str | None = None,
+    dark: bool | None = None,
 ) -> None:
     """Launch the simple Ollama quota GUI window.
 
     Args:
         cookie: __Secure-session cookie value or callable to fetch/refresh it.
         title:  Optional window title. Defaults to "<app> (<version>)".
+        dark:   Force dark mode (``True``) or light (``False``); ``None``
+                restores the saved darkmode setting (``--theme`` maps here).
     """
     try:
         import tkinter  # noqa: F401
@@ -685,4 +685,4 @@ def launch_gui(
             "On Linux, install it with: sudo apt install python3-tk"
         )
 
-    OllamaGui(cookie=cookie, title=title).run()
+    OllamaGui(cookie=cookie, title=title, dark=dark).run()

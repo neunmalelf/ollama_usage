@@ -17,6 +17,7 @@ import tkinter.font as tkfont
 from datetime import datetime, timezone
 
 from typing import Callable
+from ollama_usage import config
 from ollama_usage.exceptions import NetworkError, OllamaUsageError, AuthError
 from ollama_usage.scraper import get_usage, plan_display_name
 from ollama_usage.shortcuts import bind_quit
@@ -27,8 +28,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-# Widget-only settings file.
-_STATE_FILE = pathlib.Path.home() / ".ollama-usage-widget.cfg"
+# Widget-only settings file (in ~/.config/ollama_usage/, created on first start).
+_STATE_FILE = config.WIDGET_CFG
 
 THEMES: dict[str, dict[str, str]] = {
     "dark": {
@@ -213,7 +214,7 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     segs.append((")", theme["sub"]))
     segs.append((" s: ", theme["sub"]))
     segs.append((f"{session.get('used_pct', 0.0):.1f}", theme[_SESSION_PCT_COLOR]))
-    segs.append(("%", theme[_LABEL_COLOR]))
+    segs.append((" %", theme[_LABEL_COLOR]))
     segs.append((" (", theme["sub"]))
     segs.extend(_mini_countdown_segments(
         _seconds_until(session.get("resets_at", "")), theme
@@ -222,7 +223,7 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     segs.append((" |", theme["sub"]))
     segs.append((" w: ", theme["sub"]))
     segs.append((f"{weekly.get('used_pct', 0.0):.1f}", _pct_color(weekly.get("used_pct", 0.0), theme)))
-    segs.append(("%", theme[_LABEL_COLOR]))
+    segs.append((" %", theme[_LABEL_COLOR]))
     segs.append((" (", theme["sub"]))
     segs.extend(_mini_countdown_segments(
         _seconds_until(weekly.get("resets_at", "")), theme
@@ -320,6 +321,7 @@ def _save_state(state: dict) -> None:
     try:
         parser = configparser.ConfigParser()
         parser["widget"] = {key: str(value) for key, value in state.items()}
+        config.ensure_config_dir()
         with _STATE_FILE.open("w", encoding="utf-8") as stream:
             parser.write(stream)
     except Exception:

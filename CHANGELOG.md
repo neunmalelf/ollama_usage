@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.20260911213613Z] - 2026-09-11
 
 ### Added
 
@@ -34,7 +34,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Widget: the default opacity is now **0.80 whenever `--background-transparent`
   is given** (0.92 otherwise); an explicit `--opacity` always wins.
 
+- CLI: single-shot ``--minidisplay`` and ``--minidisplay-horizontal``
+  (``--autorefresh-off``) no longer clear the terminal before printing;
+  the in-place auto-refresh redraw is unchanged.
+- Config: all settings now live in ``~/.config/ollama_usage/``
+  (``gui.cfg``, ``widget.cfg``). The directory is created on first program
+  start and dotted legacy files (``~/.ollama-usage-*.cfg``) are migrated
+  there automatically. ``--reset-settings`` removes the new files.
+
+- GUI: the window auto-sizes to its content — the fixed 640x300 default
+  clipped the text (longest line 852px; content needs ~1010x334). It is not
+  resizable and has no scrollbar (the content always fits); the obsolete
+  ``geometry`` setting was removed. The text height follows the content line
+  count, clamped to the screen.
+- CLI/widget/GUI: a single space is printed between a percentage value and
+  the ``%`` sign everywhere (full display, minidisplay, widget compact and
+  bars, GUI).
+
 ### Fixed
+- GUI: unit tests wrote mock values into the real
+  ``~/.ollama-usage-gui.cfg``; a corrupted ``geometry`` value then crashed
+  startup ("bad geometry specifier") so no window appeared. Tests no longer
+  touch the real state file, and with the ``geometry`` setting removed (see
+  above) the crash class is gone entirely.
+- GUI: ``--theme dark`` (and ``--theme light``/``minimal``) now sets the
+  GUI darkmode; previously the flag only affected the widget and the GUI
+  always restored its saved setting. Without ``--theme`` the GUI keeps
+  restoring its saved darkmode value.
+- GUI: on a light background the yellow color (the "days" part of the
+  countdown, and 50-80% percentages) is darkened to readable amber
+  (``#a05a00``) instead of bright yellow on white.
 - Widget (Qt backend): the right-click context menu never opened in the
   Nuitka-compiled binary — shiboken's signal machinery inspects slots with
   CPython `PyFunction_*` APIs, which raise `SystemError` (funcobject.c:432)

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ollama_usage import __version__ as _pkg_version
+from ollama_usage import config
 from ollama_usage.cookie import (
     firefox_profile_diagnostics,
     get_cookie_auto,
@@ -120,8 +121,8 @@ def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
 
     The number is colored by severity; the ``%`` symbol uses the label color.
     """
-    text = f"{pct:.1f}%"
-    padded_text = f"{text:>6}"
+    text = f"{pct:.1f} %"
+    padded_text = f"{text:>7}"
     if use_color is None:
         use_color = _use_color()
     if not use_color:
@@ -132,10 +133,10 @@ def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
         color = _ANSI["yellow"]
     else:
         color = _ANSI["red"]
-    num = padded_text[:-1]  # number part, right-aligned (excludes the %)
+    num = padded_text[:-2]  # number part, right-aligned (excludes " %")
     return (
         color + num + _ANSI["reset"]
-        + _ANSI[_LABEL_COLOR] + "%" + _ANSI["reset"]
+        + _ANSI[_LABEL_COLOR] + " %" + _ANSI["reset"]
     )
 
 
@@ -248,11 +249,6 @@ def display(
     if as_json:
         print(json.dumps(data, indent=2))
     elif minidisplay_horizontal or minidisplay:
-        # Clear the terminal first so only the minidisplay output is visible
-        # (no leftover prompt). Only when stdout is a TTY.
-        if sys.stdout.isatty():
-            sys.stdout.write("\033[2J\033[H")
-            sys.stdout.flush()
         print(_mini_display(data, _use_color(), minidisplay_horizontal))
     else:
         use_color = _HAS_COLOR and sys.stdout.isatty() and "NO_COLOR" not in os.environ
@@ -349,7 +345,7 @@ def _check_alert(data: dict, threshold: Optional[float], quiet: bool) -> bool:
     weekly_pct = data["weekly"]["used_pct"]
     if session_pct > threshold or weekly_pct > threshold:
         if not quiet:
-            msg = f"Warning: usage exceeds {threshold}%"
+            msg = f"Warning: usage exceeds {threshold} %"
             use_color = (
                 _HAS_COLOR and sys.stderr.isatty() and "NO_COLOR" not in os.environ
             )
@@ -553,24 +549,22 @@ def main():
         "--minidisplay",
         action="store_true",
         help="Single-line compact output, e.g.:\n"
-        "  olu (PRO) s: 42.0%% (02:46) | w: 77.0%% (1d 06:46) ws: 2 wr: 0\n"
+        "  olu (PRO) s: 42.0 %% (02:46) | w: 77.0 %% (1d 06:46) ws: 2 wr: 0\n"
         "  olu = ollama usage, (PRO) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
         "  ws = web search requests this session\n"
         "  wr = web fetch requests this session\n"
-        "  remaining time is [dd] hh:mm (days omitted when zero)\n"
-        "  clears the terminal before showing the line (TTY only)",
+        "  remaining time is [dd] hh:mm (days omitted when zero)",
     )
     parser.add_argument(
         "--minidisplay-horizontal",
         action="store_true",
         help="Multi-line compact output, each info on its own line, e.g.:\n"
         "  olu (PRO)\n"
-        "  s:  42.0%% (02:46)\n"
-        "  w:  77.0%% (1d 06:46)\n"
+        "  s:  42.0 %% (02:46)\n"
+        "  w:  77.0 %% (1d 06:46)\n"
         "  ws: 2\n"
-        "  wr: 0 [auto-refresh-timer]\n"
-        "  clears the terminal before showing the output (TTY only)",
+        "  wr: 0 [auto-refresh-timer]",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")
@@ -656,9 +650,10 @@ def main():
     )
     parser.add_argument(
         "--theme",
-        default="dark",
+        default=None,
         choices=["dark", "light", "minimal"],
-        help="Defines the color scheme used together with --widget",
+        help="Defines the color scheme for --widget and --gui (default: "
+        "the widget uses dark, the GUI restores its saved darkmode setting)",
     )
     parser.add_argument(
         "--size", default=None, choices=["compact", "full"],
@@ -698,6 +693,10 @@ def main():
         parser.print_help()
         return
 
+    # Create the per-user config directory on first start and pull in
+    # settings files from the legacy dotted $HOME locations.
+    config.ensure_config_dir()
+    config.migrate_legacy_configs()
     # Surface the --background-transparent platform limitation before the
     # daemon spawns a detached child (whose stderr is /dev/null).
     _warn_transparent_fallback(args)
@@ -749,8 +748,7 @@ def main():
 
     try:
         if args.reset_settings:
-            for name in (".ollama-usage-gui.cfg", ".ollama-usage-widget.cfg"):
-                path = pathlib.Path.home() / name
+            for path in (config.GUI_CFG, config.WIDGET_CFG):
                 try:
                     path.unlink(missing_ok=True)
                     print(f"Reset settings: {path}")
@@ -809,7 +807,10 @@ def main():
         if args.gui:
             from ollama_usage.gui import launch_gui
 
-            launch_gui(cookie=cookie if args.cookie else get_current_cookie)
+            launch_gui(
+                cookie=cookie if args.cookie else get_current_cookie,
+                dark=None if args.theme is None else args.theme == "dark",
+            )
             return
 
         if args.widget:
@@ -818,7 +819,7 @@ def main():
             launch_widget(
                 cookie=cookie if args.cookie else get_current_cookie,
                 interval=30,
-                theme=args.theme,
+                theme=args.theme or "dark",
                 size=args.size,
                 opacity=args.opacity,
                 position=args.position,
