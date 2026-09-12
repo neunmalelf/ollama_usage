@@ -582,6 +582,17 @@ def main():
         help="Reset GUI and widget settings files, then exit",
     )
     parser.add_argument(
+        "--save-cookie", type=str, metavar="COOKIE",
+        help="Store the __Secure-session cookie in "
+        "~/.config/ollama_usage/cookie, then exit. After that the program "
+        "runs without any installed browser (self-sustained). Re-run it "
+        "when the cookie expires.",
+    )
+    parser.add_argument(
+        "--forget-cookie", action="store_true",
+        help="Delete the stored session cookie, then exit",
+    )
+    parser.add_argument(
         "--autorefresh-off",
         action="store_true",
         help="Disable continuous refresh (single fetch). Autorefresh is on by default.",
@@ -755,6 +766,19 @@ def main():
                 except OSError as exc:
                     print(f"Could not reset {path}: {exc}", file=sys.stderr)
                     raise SystemExit(1)
+
+        if args.save_cookie is not None:
+            value = _sanitize_cookie(args.save_cookie)
+            if not value:
+                print("Error: empty cookie value", file=sys.stderr)
+                raise SystemExit(1)
+            config.save_cookie(value)
+            print(f"Saved session cookie: {config.COOKIE_FILE}")
+            return
+
+        if args.forget_cookie:
+            config.forget_cookie()
+            print("Removed the stored session cookie (if any)")
             return
 
         if args.debug_firefox_profiles:
@@ -775,15 +799,29 @@ def main():
                 format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             )
 
+        def _sync_stored_cookie(value: str) -> None:
+            """Remember a browser-provided cookie so the stored copy stays
+            fresh — the program then keeps working even when the browser is
+            later uninstalled or the profile is unavailable."""
+            if config.load_saved_cookie() != value:
+                config.save_cookie(value)
+
         def get_current_cookie() -> str:
             if args.cookie:
                 return _sanitize_cookie(args.cookie)
             if args.browser:
-                return _sanitize_cookie(BROWSERS[args.browser]())
+                value = _sanitize_cookie(BROWSERS[args.browser]())
+                _sync_stored_cookie(value)
+                return value
             env_cookie = get_cookie_env()
             if env_cookie:
                 return _sanitize_cookie(env_cookie)
-            return _sanitize_cookie(get_cookie_auto())
+            stored_cookie = config.load_saved_cookie()
+            if stored_cookie:
+                return _sanitize_cookie(stored_cookie)
+            value = _sanitize_cookie(get_cookie_auto())
+            _sync_stored_cookie(value)
+            return value
 
         cookie = get_current_cookie()
         logger.debug("Cookie obtained (***)")
@@ -873,8 +911,14 @@ def main():
                                 if _check_alert(data, args.alert, args.quiet):
                                     alert_triggered = True
                             except Exception as refresh_err:
+                                hint = ""
+                                if config.load_saved_cookie():
+                                    hint = (
+                                        " Hint: update the stored cookie with "
+                                        "ollama_usage --save-cookie <new value>."
+                                    )
                                 print(
-                                    f"Cookie auto-refresh failed: {refresh_err}",
+                                    f"Cookie auto-refresh failed: {refresh_err}{hint}",
                                     file=sys.stderr,
                                 )
                                 raise SystemExit(1)
@@ -907,6 +951,13 @@ def main():
             raise SystemExit(1)
 
     except OllamaUsageError as e:
+        if config.load_saved_cookie():
+            print(
+                "Hint: the stored cookie may have expired — update it with: "
+                "ollama_usage --save-cookie <value>, or remove it with "
+                "--forget-cookie.",
+                file=sys.stderr,
+            )
         print(f"Error: {e}", file=sys.stderr)
         parser.print_help(sys.stderr)
         raise SystemExit(1)

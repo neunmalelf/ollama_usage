@@ -16,6 +16,10 @@ after the upgrade:
   - `y`: vertical screen position
   - `size`: `compact` or `full`
 
+- Cookie (self-sustained mode): `~/.config/ollama_usage/cookie` — the stored
+  `__Secure-session` cookie (written by `--save-cookie`, mode 0600; removed
+  by `--forget-cookie`)
+
 These paths are derived from the current user's home directory; no username
 or profile path is hardcoded. Both files use INI-style CFG syntax. Existing
 settings are preserved independently between GUI and widget.
@@ -127,6 +131,16 @@ ollama-usage
 
 # One-line usage
 OLLAMA_BROWSER_COOKIE=YOUR_SESSION_COOKIE ollama-usage --json
+
+# Store the cookie once — after this the program runs without any browser
+# installed. While a browser is used, the stored copy stays fresh
+# automatically; re-run --save-cookie only if NO browser is available and
+# the cookie expires (the program tells you when that happens).
+ollama-usage --save-cookie YOUR_SESSION_COOKIE
+ollama-usage
+
+# Remove the stored cookie again
+ollama-usage --forget-cookie
 
 # Autorefresh is ON by default (120s, shows next-refresh timestamp footer)
 ollama-usage

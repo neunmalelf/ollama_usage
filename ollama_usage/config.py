@@ -28,6 +28,8 @@ LEGACY_FILES: tuple[tuple[pathlib.Path, pathlib.Path], ...] = (
 )
 
 
+
+
 def ensure_config_dir() -> None:
     """Create ``CONFIG_DIR`` when missing (idempotent, best-effort)."""
     try:
@@ -50,3 +52,34 @@ def migrate_legacy_configs() -> None:
             logger.debug("Migrated %s -> %s", legacy, current)
         except OSError as exc:
             logger.warning("Could not migrate %s: %s", legacy, exc)
+
+
+#: Saved session cookie (self-sustained mode — no installed browser needed).
+COOKIE_FILE = CONFIG_DIR / "cookie"
+
+
+def load_saved_cookie() -> str | None:
+    """Return the stored session cookie, or None when absent/unreadable."""
+    try:
+        value = COOKIE_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def save_cookie(value: str) -> None:
+    """Persist the session cookie with mode 0600."""
+    ensure_config_dir()
+    COOKIE_FILE.write_text(value.strip() + "\n", encoding="utf-8")
+    try:
+        COOKIE_FILE.chmod(0o600)
+    except OSError:
+        logger.debug("Could not chmod 600 %s", COOKIE_FILE)
+
+
+def forget_cookie() -> None:
+    """Delete the stored session cookie if present."""
+    try:
+        COOKIE_FILE.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.debug("Could not remove %s: %s", COOKIE_FILE, exc)

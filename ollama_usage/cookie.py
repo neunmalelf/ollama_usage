@@ -431,7 +431,8 @@ def get_cookie_auto() -> str:
             continue
     raise OllamaUsageError(
         "No Ollama session cookie found in any supported browser. "
-        "Pass it manually with --cookie."
+        "Pass it manually with --cookie, or store one once with "
+        "--save-cookie to run without any installed browser."
     )
 
 

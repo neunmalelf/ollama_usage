@@ -19,6 +19,15 @@
 
 `ollama-usage --cookie {{__Secure-session_cookie}}`
 
+
+- Persist the session cookie so no browser is needed (self-sustained):
+
+`ollama-usage --save-cookie {{cookie}}`
+
+- Remove the stored session cookie:
+
+`ollama-usage --forget-cookie`
+
 - Print one compact line with a 60 second refresh:
 
 `ollama-usage --minidisplay --autorefresh {{60}}`
