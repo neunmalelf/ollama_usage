@@ -51,3 +51,19 @@ def test_migrate_without_legacy_is_noop(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(config, "LEGACY_FILES", ())
     config.migrate_legacy_configs()
     assert (tmp_path / "cfg").is_dir()
+
+
+def test_save_load_forget_cookie(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "cookie")
+    config.save_cookie("  stored-cookie  ")
+    cookie_file = tmp_path / "cookie"
+    assert config.load_saved_cookie() == "stored-cookie"
+    assert cookie_file.read_text(encoding="utf-8") == "stored-cookie\n"
+    assert (cookie_file.stat().st_mode & 0o777) == 0o600
+    config.forget_cookie()
+    assert config.load_saved_cookie() is None
+
+
+def test_load_saved_cookie_missing_returns_none(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "missing")
+    assert config.load_saved_cookie() is None

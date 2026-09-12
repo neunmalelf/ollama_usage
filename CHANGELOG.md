@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.20260912071632Z] - 2026-09-12
+
+### Added
+
+- Self-sustained mode: `--save-cookie COOKIE` stores the session cookie in
+  `~/.config/ollama_usage/cookie` (mode 0600), so the program runs without
+  any installed browser; `--forget-cookie` removes it. Cookie lookup order:
+  `--cookie` → `OLLAMA_BROWSER_COOKIE` → stored cookie → browser
+  auto-detect. A browser-provided cookie is synced to the stored copy
+  automatically, so no manual action is normally required; auth failures
+  hint at updating the stored cookie when it expires.
+
 ## [2.0.20260911213613Z] - 2026-09-11
 
 ### Added

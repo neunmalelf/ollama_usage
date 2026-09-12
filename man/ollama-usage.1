@@ -115,6 +115,21 @@ and
 .B ~/.config/ollama_usage/widget.cfg
 and restores the defaults on next launch.
 .TP
+.BI \-\-save\-cookie " COOKIE"
+Store the
+.B __Secure\-session
+cookie in
+.B ~/.config/ollama_usage/cookie
+(mode 0600) and exit.  After that the program runs without any installed
+browser (self-sustained mode).  While a browser is available the stored copy
+is refreshed automatically; re-run
+.B \-\-save\-cookie
+only when the cookie expires and no browser is available.  Remove it with
+.BR \-\-forget\-cookie .
+.TP
+.B \-\-forget\-cookie
+Delete the stored session cookie (if any) and exit.
+.TP
 .B \-\-autorefresh-off
 Disable continuous refresh (single fetch).  Auto-refresh is on by default.
 .TP
@@ -306,11 +321,21 @@ GUI settings (INI-style): dark mode, auto-refresh interval.
 .B ~/.config/ollama_usage/widget.cfg
 Widget settings (INI-style): screen position (\fIx\fR, \fIy\fR) and size
 (\fIcompact\fR or \fIfull\fR).
+.TP
+.B ~/.config/ollama_usage/cookie
+Stored
+.B __Secure\-session
+cookie for the self-sustained mode (written by
+.BR \-\-save\-cookie ,
+mode 0600).
 .SH SECURITY
 The tool reads your local browser cookie database to authenticate against
 ollama.com.  Depending on your operating system and browser, a security prompt
 may appear asking permission to access browser cookies or local browser data.
 This is expected.
+Alternatively, store the cookie once with
+.BR \-\-save\-cookie
+and the program runs without any installed browser.
 .PP
 The cookie grants access to your Ollama account.  Treat it as a secret: do not
 paste it into issue reports, logs or chat.

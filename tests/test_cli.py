@@ -761,3 +761,73 @@ class TestVoiceArgs:
         args = self._parse([])
         assert args.voice_info_when_session_usage_was_reset is None
         assert args.voice_info_when_weekly_usage_was_reset is None
+
+
+class TestCookieStorage:
+    """--save-cookie/--forget-cookie and the stored-cookie priority."""
+
+    def test_save_then_forget(self, tmp_path, monkeypatch, capsys) -> None:
+        from ollama_usage import config
+        monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "cookie")
+        with patch("sys.argv",
+                   ["ollama-usage", "--save-cookie", "  dummy-cookie  "]):
+            from ollama_usage.cli import main
+            main()
+        out = capsys.readouterr().out
+        assert "Saved session cookie" in out
+        assert config.load_saved_cookie() == "dummy-cookie"
+        with patch("sys.argv", ["ollama-usage", "--forget-cookie"]):
+            from ollama_usage.cli import main
+            main()
+        assert config.load_saved_cookie() is None
+
+    def test_stored_cookie_beats_browser_auto(self, tmp_path, monkeypatch, capsys) -> None:
+        from ollama_usage import config
+        monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "cookie")
+        (tmp_path / "cookie").write_text("stored-cookie\n", encoding="utf-8")
+        monkeypatch.delenv("OLLAMA_BROWSER_COOKIE", raising=False)
+        with patch("ollama_usage.cookie.get_cookie_auto",
+                   side_effect=AssertionError("browser auto-detect must not run")), \
+             patch("ollama_usage.cli.get_usage", return_value={
+                 "plan": "PRO", "session": {"used_pct": 1.0,
+                 "resets_at": "2026-04-04T17:00:00Z"},
+                 "weekly": {"used_pct": 1.0,
+                 "resets_at": "2026-04-06T00:00:00Z"},
+             }), \
+             patch("sys.argv", ["ollama-usage", "--autorefresh-off", "--json"]):
+            from ollama_usage.cli import main
+            main()
+        out = capsys.readouterr().out
+        assert '"plan": "PRO"' in out
+
+    def test_browser_cookie_syncs_to_storage(self, tmp_path, monkeypatch, capsys) -> None:
+        from ollama_usage import config, cli
+        monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "cookie")
+        with patch.dict(cli.BROWSERS, {"firefox": lambda: "fresh-browser-cookie"}), \
+             patch("ollama_usage.cli.get_usage", return_value={
+                 "plan": "PRO", "session": {"used_pct": 1.0,
+                 "resets_at": "2026-04-04T17:00:00Z"},
+                 "weekly": {"used_pct": 1.0,
+                 "resets_at": "2026-04-06T00:00:00Z"},
+             }), \
+             patch("sys.argv", ["ollama-usage", "--autorefresh-off",
+                                "--browser", "firefox", "--json"]):
+            from ollama_usage.cli import main
+            main()
+        assert config.load_saved_cookie() == "fresh-browser-cookie"
+
+    def test_manual_cookie_does_not_touch_storage(self, tmp_path, monkeypatch) -> None:
+        from ollama_usage import config
+        monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "cookie")
+        (tmp_path / "cookie").write_text("old\n", encoding="utf-8")
+        with patch("ollama_usage.cli.get_usage", return_value={
+                 "plan": "PRO", "session": {"used_pct": 1.0,
+                 "resets_at": "2026-04-04T17:00:00Z"},
+                 "weekly": {"used_pct": 1.0,
+                 "resets_at": "2026-04-06T00:00:00Z"},
+             }), \
+             patch("sys.argv", ["ollama-usage", "--autorefresh-off", "--quiet",
+                                "--cookie", "manual-value"]):
+            from ollama_usage.cli import main
+            main()
+        assert config.load_saved_cookie() == "old"
