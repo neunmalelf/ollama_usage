@@ -28,9 +28,11 @@ list;
 .B json
 \-\- machine-readable JSON;
 .B minidisplay
-\-\- one compact line; and
+\-\- one compact line;
 .B minidisplay-horizontal
-\-\- the compact view on stacked lines.
+\-\- the compact view on stacked lines; and
+.B dataonly
+\-\- one machine-readable line for scripts and agents.
 .PP
 Auto-refresh is enabled by default (every 120 seconds, with a footer showing
 the next refresh time).  Use
@@ -48,7 +50,7 @@ Show the program version and exit.
 Single-line compact output, e.g.:
 .sp
 .nf
-olu (PRO) s: 42.0% (02:46) | w: 77.0% (1d 06:46) ws: 2 wr: 0
+olu (PRO) s: 42.0 % (02:46) | w: 77.0 % (1d 06:46) ws: 2 wr: 0
 .fi
 .sp
 .RS
@@ -62,22 +64,43 @@ wr  = web fetch requests this session
 .sp
 Remaining time is shown as [dd] \fIhh:mm\fR (days omitted when zero).  A grey
 (mm:ss) countdown is appended and refreshed in place; disable it with
-.B \-\-autorefresh-off.
-Clears the terminal before showing the line (TTY only).
+.BR \-\-autorefresh\-off .
+In single-shot mode (single fetch) the terminal is left untouched.
 .TP
 .B \-\-minidisplay-horizontal
 Multi-line compact output, one item per line:
 .sp
 .nf
 olu (PRO)
-s: 42.0% (02:46)
-w: 77.0% (1d 06:46)
+s: 42.0 % (02:46)
+w: 77.0 % (1d 06:46)
 ws: 2
 wr: 0 [auto-refresh-timer]
 .fi
 .sp
-Clears the terminal before showing the output (TTY only) and refreshes the
-same way by default.
+Refreshes in place by default, redrawing the block with the countdown on
+the
+.I wr
+line (two spaces after the count).
+.TP
+.B \-\-dataonly
+Print one machine-readable line for calling programs and agents, then exit
+(single fetch):
+.sp
+.nf
+PRO;48.4;11880;49.3;172800;34;0
+.fi
+.sp
+Fields, separated by semicolons:
+.IR subscription ,
+percent used this session,
+seconds until the session quota resets,
+percent used this week,
+seconds until the weekly quota resets,
+web search requests and web fetch requests of the current session.
+Percentages have one decimal and no
+.IR % " sign; seconds are"
+0 when the quota is due.
 .TP
 .B \-\-json
 Output the usage as JSON.  The top-level object contains the fields
@@ -227,7 +250,7 @@ translucent window with a warning.
 .B \-\-debug
 Enable debug logging.
 .TP
-.BR \-\-daemon ", " \-\-damon
+.B \-\-daemon
 Run the widget, GUI or auto-refresh loop in the background so the terminal can
 be closed.  Detaches via fork/setsid and redirects stdio to /dev/null.
 .br

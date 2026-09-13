@@ -831,3 +831,38 @@ class TestCookieStorage:
             from ollama_usage.cli import main
             main()
         assert config.load_saved_cookie() == "old"
+
+
+class TestDataOnly:
+    """--dataonly: one machine-readable line for scripts and agents."""
+
+    def test_line_format(self) -> None:
+        from ollama_usage.cli import _dataonly_line
+        line = _dataonly_line(make_data(48.4, 49.3, web_search_requests=35))
+        parts = line.split(";")
+        assert parts[0] == "FREE"
+        assert parts[1] == "48.4"
+        assert parts[2].isdigit()
+        assert parts[3] == "49.3"
+        assert parts[4].isdigit()
+        assert parts[5] == "35"
+        assert parts[6] == "0"
+        assert len(parts) == 7
+
+    def test_absent_counts_are_zero_and_past_resets_zero_seconds(self) -> None:
+        from ollama_usage.cli import _dataonly_line
+        line = _dataonly_line(make_data(2.6, 1.9))
+        assert line.endswith(";2.6;0;1.9;0;0;0")
+
+    def test_prints_exactly_one_line(self, capsys) -> None:
+        with patch("ollama_usage.cli.get_usage", return_value={
+                 "plan": "pro", "session": {"used_pct": 48.4,
+                 "resets_at": "2026-04-04T17:00:00Z"},
+                 "weekly": {"used_pct": 49.3,
+                 "resets_at": "2026-04-06T00:00:00Z"},
+             }), \
+             patch("sys.argv", ["ollama-usage", "--dataonly"]):
+            from ollama_usage.cli import main
+            main()
+        out = capsys.readouterr().out
+        assert out == "PRO;48.4;0;49.3;0;0;0\n"
