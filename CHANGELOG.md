@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `--dataonly`: prints one machine-readable line for scripts and agents —
+  `subscription;percent_session;seconds_to_session_reset;percent_weekly;seconds_to_weekly_reset;ws;wr`
+  (single fetch, no colors/countdown; e.g.
+  `PRO;48.4;11880;49.3;172800;34;0`) so wrappers can track the remaining
+  token contingent and the reset times.
+
 ## [3.0.20260912071632Z] - 2026-09-12
 
 ### Added

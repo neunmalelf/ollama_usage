@@ -118,6 +118,9 @@ ollama-usage
 # Output as JSON
 ollama-usage --json
 
+# One machine-readable line for scripts and agents
+ollama-usage --dataonly
+
 # Force a specific browser
 ollama-usage --browser firefox
 ollama-usage --browser chrome
@@ -231,6 +234,36 @@ wr:  0
 It refreshes in place by default, redrawing the block with the countdown on the `wr:` line (two spaces after the count).
 
 The `WebSearch:` line reports the number of web search requests during the current session/week (shown as a request count in the settings meters). The `WebFetch :` line reports the number of web fetch requests the same way. The `Models used this week:` section lists per-model request counts. All only appear when there is data — otherwise they are omitted. Model labels are shown in white; the request numbers are shown in cyan.
+
+
+### Dataonly output (for scripts and agents)
+`--dataonly` prints one machine-readable line and exits (single fetch, no
+colors, no countdown):
+
+```
+PRO;48.4;11880;49.3;172800;34;0
+```
+
+Format: `<subscription>;<percent_used_session>;<seconds_until_session_reset>;<percent_used_weekly>;<seconds_until_weekly_reset>;<web_search_requests>;<web_fetch_requests>` — percentages with one decimal (no `%` sign), seconds until the quota resets (`0` when due), `ws`/`wr` are the web search / web fetch request counts of the current session. Intended for agents and wrappers that need the remaining token contingent and the reset times.
+
+### JSON output (for scripts and agents)
+`--json` prints the usage as a single JSON object:
+
+```json
+{
+  "plan": "pro",
+  "session": { "used_pct": 35.8, "resets_at": "2026-09-12T13:00:00Z" },
+  "weekly":  { "used_pct": 57.7, "resets_at": "2026-09-14T00:00:00Z" },
+  "web_search_requests": 35,
+  "web_fetch_requests": null,
+  "models": [ { "name": "glm-5.3-flash", "requests": 1293 } ]
+}
+```
+
+Fields: `plan` is the raw plan name; `session`/`weekly` carry `used_pct`
+(one decimal) and `resets_at` (ISO-8601 UTC timestamp); `web_search_requests`
+and `web_fetch_requests` are `int` or `null`; `models` is a list of
+`{name, requests}` and absent when empty.
 
 Terminal colors (ANSI, self-contained — no external dependency):
 - Plan name — **orange**
@@ -454,14 +487,12 @@ launch_widget(
 
 ### Daemon mode (run in background)
 
-Add `--daemon` (alias `--damon` for typo-compatibility) to run widget/GUI or autorefresh in background — terminal is not blocked and can be closed:
+Add `--daemon` to run widget/GUI or autorefresh in background — terminal is not blocked and can be closed:
 
 ```bash
 # Widget in background
 ollama_usage --widget --daemon
 ollama_usage --widget --autorefresh --browser firefox --daemon
-# Alias --damon also works
-ollama_usage --widget --damon
 
 # GUI in background
 ollama_usage --gui --daemon

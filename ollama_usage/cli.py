@@ -140,6 +140,16 @@ def _color_pct(pct: float, use_color: Optional[bool] = None) -> str:
     )
 
 
+
+def _seconds_until(iso: str) -> int:
+    """Return whole seconds until the ISO timestamp, 0 when past or invalid."""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        return max(0, int((dt - datetime.now(timezone.utc)).total_seconds()))
+    except Exception:
+        return 0
+
+
 def _format_remaining_compact(iso: str, use_color: bool = False) -> str:
     """Return remaining time as ``[dd] hh:mm`` (days omitted when zero).
 
@@ -235,6 +245,27 @@ def _mini_display(data: dict, use_color: bool, horizontal: bool) -> str:
     if horizontal:
         return _mini_horizontal(data, use_color)
     return _mini_line(data, use_color)
+
+
+def _dataonly_line(data: dict) -> str:
+    """Return one machine-readable line for calling programs and agents:
+
+    ``subscription;session_pct;seconds_to_session_reset;weekly_pct;``
+    ``seconds_to_weekly_reset;web_search;web_fetch``
+    """
+    session_pct = data["session"].get("used_pct", 0.0)
+    weekly_pct = data["weekly"].get("used_pct", 0.0)
+    ws = data.get("web_search_requests")
+    wr = data.get("web_fetch_requests")
+    return ";".join((
+        str(plan_display_name(data["plan"])),
+        f"{session_pct:.1f}",
+        str(max(0, int(_seconds_until(data["session"].get("resets_at", ""))))),
+        f"{weekly_pct:.1f}",
+        str(max(0, int(_seconds_until(data["weekly"].get("resets_at", ""))))),
+        str(ws if ws is not None else 0),
+        str(wr if wr is not None else 0),
+    ))
 
 
 def display(
@@ -546,6 +577,18 @@ def main():
         "-v", "--version", action="version", version=f"ollama-usage {_get_version()}"
     )
     parser.add_argument(
+        "--dataonly", action="store_true",
+        help="Print one machine-readable line for calling programs and "
+        "agents, then exit (single fetch). Fields, semicolon-separated:\n"
+        "  plan; percent_session; seconds_to_session_reset;\n"
+        "  percent_weekly; seconds_to_weekly_reset;\n"
+        "  web_search; web_fetch\n"
+        "e.g.  PRO;48.4;11880;49.3;172800;34;0\n"
+        "Percentages with one decimal (no %% sign). Seconds until the\n"
+        "quota resets (0 when due). web_search/web_fetch: request counts\n"
+        "of the current session.",
+    )
+    parser.add_argument(
         "--minidisplay",
         action="store_true",
         help="Single-line compact output, e.g.:\n"
@@ -566,7 +609,18 @@ def main():
         "  ws: 2\n"
         "  wr: 0 [auto-refresh-timer]",
     )
-    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument(
+        "--json", action="store_true",
+        help="Output the usage as JSON. Nested keys use dot notation:\n"
+        "  plan                     raw plan name (e.g. \"pro\")\n"
+        "  session.used_pct         percent used this session\n"
+        "  session.resets_at        ISO-8601 UTC reset timestamp\n"
+        "  weekly.used_pct          percent used this week\n"
+        "  weekly.resets_at         ISO-8601 UTC reset timestamp\n"
+        "  web_search_requests      int, null when absent\n"
+        "  web_fetch_requests       int, null when absent\n"
+        "  models                   list of {name, requests}, absent when empty",
+    )
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")
     parser.add_argument(
         "--browser", type=str, choices=BROWSERS.keys(), help="Force a specific browser"
@@ -593,11 +647,6 @@ def main():
         help="Delete the stored session cookie, then exit",
     )
     parser.add_argument(
-        "--autorefresh-off",
-        action="store_true",
-        help="Disable continuous refresh (single fetch). Autorefresh is on by default.",
-    )
-    parser.add_argument(
         "--autorefresh",
         nargs="?",
         type=int,
@@ -606,6 +655,11 @@ def main():
         metavar="SECONDS",
         help="Refresh interval in SECONDS (default: 120).\n"
         f"{_ANSI[decorator_color]}Shows a timestamp footer with the next refresh time.{_ANSI['reset']}",
+    )
+    parser.add_argument(
+        "--autorefresh-off",
+        action="store_true",
+        help="Disable continuous refresh (single fetch). Autorefresh is on by default.",
     )
     parser.add_argument(
         "--alert",
@@ -689,7 +743,7 @@ def main():
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logs")
     parser.add_argument(
-        "--daemon", "--damon",
+        "--daemon",
         action="store_true",
         dest="daemon",
         help="Run in background (daemon) so terminal can be closed. "
@@ -715,8 +769,8 @@ def main():
     # can be closed.  We use subprocess.Popen instead of os.fork() to avoid
     # deadlocks in Nuitka-compiled binaries where the process is multi-threaded.
     if getattr(args, "daemon", False):
-        # Build the command line for the child (everything except --daemon/--damon)
-        child_args = [a for a in sys.argv[1:] if a not in ("--daemon", "--damon")]
+        # Build the command line for the child (everything except --daemon)
+        child_args = [a for a in sys.argv[1:] if a != "--daemon"]
         # Determine the right executable.
         # sys.argv[0] is the path the user invoked (the real binary).
         # On Linux, /proc/self/exe is an alternative but in Nuitka onefile
@@ -866,6 +920,10 @@ def main():
             )
             return
 
+        if args.dataonly:
+            data = get_usage(cookie)
+            print(_dataonly_line(data))
+            return
         if not args.autorefresh_off:
             auto_interval = max(1, args.autorefresh)
             mini = (args.minidisplay or args.minidisplay_horizontal) and not args.json and not args.quiet
@@ -899,7 +957,6 @@ def main():
                                 )
                                 cookie = get_current_cookie()
                                 data = get_usage(cookie)
-                                voice_tracker.check(data)
                                 if mini:
                                     line = _mini_display(data, _use_color(), horizontal)
                                 else:

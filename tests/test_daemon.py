@@ -1,4 +1,4 @@
-"""Tests for --daemon / --damon (run in background, killall)."""
+"""Tests for --daemon (run in background, killall)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 
 
 # ---------------------------------------------------------------------------
-# CLI parser accepts --daemon and --damon
+# CLI parser accepts --daemon
 # ---------------------------------------------------------------------------
 
 def _parse_args(argv):
@@ -40,10 +40,6 @@ class TestDaemonParser:
 
     def test_daemon_flag(self):
         args = _parse_args(["--daemon"])
-        assert args.daemon is True
-
-    def test_damon_alias(self):
-        args = _parse_args(["--damon"])
         assert args.daemon is True
 
     def test_daemon_with_widget(self):
@@ -98,7 +94,7 @@ class TestDaemonForkLogic:
                     mock_widget.assert_not_called()
 
     def test_daemon_popen_receives_correct_args(self):
-        """The child process should receive all args except --daemon/--damon."""
+        """The child process should receive all args except --daemon."""
         import ollama_usage.cli as cli
         mock_proc = MagicMock()
         mock_proc.pid = 9999
@@ -148,7 +144,7 @@ class TestWrapperDaemonIntegration:
 
         start = time.time()
         result = subprocess.run(
-            ["/home/fmann/sbin/ollama_usage", "--damon", "--autorefresh", "60", "--cookie", "dummy", "--quiet"],
+            ["/home/fmann/sbin/ollama_usage", "--daemon", "--autorefresh", "60", "--cookie", "dummy", "--quiet"],
             capture_output=True, text=True, timeout=5
         )
         elapsed = time.time() - start

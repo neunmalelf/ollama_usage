@@ -32,6 +32,10 @@
 
 `ollama-usage --minidisplay --autorefresh {{60}}`
 
+- Print one machine-readable line for scripts and agents (subscription, percentages, seconds until reset, ws, wr):
+
+`ollama-usage --dataonly`
+
 - Disable auto-refresh (single fetch):
 
 `ollama-usage --autorefresh-off`
