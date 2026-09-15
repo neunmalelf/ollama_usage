@@ -634,6 +634,36 @@ class TestTransparentFallbackNotice:
         assert "needs PySide6" in err
         assert "translucent background instead" in err
 
+    def test_notice_when_pyside6_present_but_broken(self, capsys) -> None:
+        """PySide6 importable by name but its C extension fails to load
+        (e.g. binary built against an older Qt than the system one): the
+        notice must say so and hint at rebuilding the binary."""
+        if sys.platform == "win32":
+            return
+        with patch("ollama_usage.widget.qt_transparency_supported",
+                   return_value=False), \
+             patch("ollama_usage.widget.pyside6_import_error",
+                   return_value="QtCore.so: undefined symbol: xyz"), \
+             patch("importlib.util.find_spec", return_value=MagicMock()):
+            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+                              "--cookie", "x"])
+        err = capsys.readouterr().err
+        assert "needs PySide6" in err
+        assert "failed to load" in err
+        assert "undefined symbol: xyz" in err
+
+    def test_notice_wording_when_pyside6_missing(self, capsys) -> None:
+        if sys.platform == "win32":
+            return
+        with patch("ollama_usage.widget.qt_transparency_supported",
+                   return_value=False), \
+             patch("importlib.util.find_spec", return_value=None):
+            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+                              "--cookie", "x"])
+        err = capsys.readouterr().err
+        assert "was not found" in err
+        assert "pip install PySide6" in err
+
     def test_no_notice_when_pyside6_available(self, capsys) -> None:
         if sys.platform == "win32":
             return

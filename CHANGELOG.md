@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PRO;48.4;11880;49.3;172800;34;0`) so wrappers can track the remaining
   token contingent and the reset times.
 
+### Fixed
+
+- `--widget --background-transparent` no longer dies when PySide6 is present
+  but its C extension fails to load (e.g. a compiled binary built against an
+  older Qt than the system one after a distribution update - the failure was
+  invisible in `--daemon` mode because the child's stderr is /dev/null). The
+  widget now probes the real Qt load, falls back to the translucent Tk
+  widget, and the CLI pre-flight prints a "failed to load ... rebuild with
+  ./_build" notice naming the import error.
+
 ## [3.0.20260912071632Z] - 2026-09-12
 
 ### Added
