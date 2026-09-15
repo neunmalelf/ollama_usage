@@ -549,14 +549,27 @@ def _warn_transparent_fallback(args) -> None:
         and getattr(args, "background_transparent", False)
         and sys.platform != "win32"
     ):
-        from ollama_usage.widget import qt_transparency_supported
+        import importlib.util
 
-        if not qt_transparency_supported():
+        from ollama_usage.widget import pyside6_import_error, qt_transparency_supported
+
+        if qt_transparency_supported():
+            return
+        if importlib.util.find_spec("PySide6") is None:
             print(
                 "Warning: --background-transparent needs PySide6 for a fully "
                 "transparent background; PySide6 was not found, so the widget "
                 "uses a translucent background instead. "
                 "Install with: pip install PySide6",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "Warning: --background-transparent needs PySide6, but PySide6 "
+                f"failed to load: {pyside6_import_error()}. The widget uses a "
+                "translucent background instead. If you are running the "
+                "compiled binary, rebuild it with ./_build after a Qt/PySide6 "
+                "system update.",
                 file=sys.stderr,
             )
 

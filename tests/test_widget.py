@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import threading
+
 from unittest.mock import MagicMock, patch
 
 from ollama_usage import widget as w
@@ -573,3 +575,34 @@ class TestLaunchDispatch:
         kwargs = mock.call_args.kwargs
         for key, value in expected.items():
             assert kwargs[key] == value, f"{key}: {kwargs.get(key)!r} != {value!r}"
+
+    def test_transparent_falls_back_to_tk_when_qt_broken(self) -> None:
+        """PySide6 passes find_spec but its C extension fails to load
+        (compiled binary built against an older Qt than the system one):
+        the Tk widget must still launch instead of crashing silently."""
+        with patch.object(w, "qt_transparency_supported", return_value=True), \
+             patch.dict("sys.modules", {"ollama_usage.widget_qt": None}), \
+             patch.object(w, "OllamaWidget") as tk_cls:
+            self._launch(background_transparent=True)
+        tk_cls.assert_called_once()
+
+
+class TestPySide6Probe:
+    """``pyside6_import_error`` probes the real C extension load, not just
+    package presence, and caches its result."""
+
+    def test_import_failure_is_reported_and_cached(self, monkeypatch) -> None:
+        monkeypatch.setattr(w, "_pyside6_import_error", w._PYSIDE6_UNPROBED)
+        monkeypatch.setitem(sys.modules, "PySide6", None)  # ImportError on import
+        err = w.pyside6_import_error()
+        assert err is not None
+        assert "PySide6" in err
+        assert w.pyside6_import_error() == err  # cached, no re-probe
+
+    def test_unloadable_pyside6_is_not_transparent_capable(self, monkeypatch) -> None:
+        monkeypatch.setattr(w, "_pyside6_import_error", "broken: undefined symbol")
+        assert w.qt_transparency_supported() is False
+
+    def test_loadable_pyside6_is_transparent_capable(self, monkeypatch) -> None:
+        monkeypatch.setattr(w, "_pyside6_import_error", None)
+        assert w.qt_transparency_supported() is True

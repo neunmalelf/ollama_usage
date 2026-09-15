@@ -802,17 +802,49 @@ class OllamaWidget:
 # ---------------------------------------------------------------------------
 
 
+_PYSIDE6_UNPROBED = object()  # sentinel: load probe not run yet
+_pyside6_import_error: str | None = _PYSIDE6_UNPROBED
+
+
+def pyside6_import_error() -> str | None:
+    """Load PySide6's C extension for real; return the failure text or None.
+
+    Usage: ``if pyside6_import_error() is None: ...`` (result is cached).
+    Returns: error text when PySide6 is missing OR present but unloadable,
+    else None.
+    Errors: raises nothing; import failures are captured.
+
+    ``importlib.util.find_spec`` only proves the package is *present*. The
+    compiled (Nuitka) binary bundles the PySide6 extension modules but not
+    Qt's shared libraries, so at runtime ``QtCore.so`` resolves the system
+    ``libQt6Core.so.6``. After a distribution Qt/PySide6 upgrade the bundled
+    extension no longer matches Qt's private ABI and the import fails with
+    ``undefined symbol`` - a crash that is invisible in ``--daemon`` mode
+    (child stderr is /dev/null). Probing the real import lets callers fall
+    back to the Tk widget instead.
+    """
+    global _pyside6_import_error
+    if _pyside6_import_error is _PYSIDE6_UNPROBED:
+        try:
+            import PySide6.QtCore  # noqa: F401
+        except ImportError as exc:
+            _pyside6_import_error = str(exc) or "PySide6 could not be imported"
+        else:
+            _pyside6_import_error = None
+    return _pyside6_import_error
+
+
 def qt_transparency_supported() -> bool:
     """Whether a fully transparent widget can be rendered on this machine.
 
     Tk has no per-pixel transparency on X11/Wayland, so the Qt-based
     transparent widget (ollama_usage.widget_qt) is used when PySide6 is
-    importable. On Windows the Tk path is natively transparent, so Qt is
-    not needed there.
+    importable *and loadable* (see :func:`pyside6_import_error`). On
+    Windows the Tk path is natively transparent, so Qt is not needed there.
     """
     if sys.platform == "win32":
         return False
-    return importlib.util.find_spec("PySide6") is not None
+    return pyside6_import_error() is None
 
 
 def launch_widget(
@@ -851,18 +883,29 @@ def launch_widget(
 
     if background_transparent and qt_transparency_supported():
         # Per-pixel transparent Qt widget (Tk cannot do this on X11/Wayland).
-        from ollama_usage.widget_qt import launch_widget_qt
-
-        launch_widget_qt(
-            cookie=cookie,
-            interval=interval,
-            theme=theme,
-            size=size,
-            opacity=opacity,
-            position=position,
-            autorefresh=autorefresh,
-        )
-        return
+        try:
+            from ollama_usage.widget_qt import launch_widget_qt
+        except ImportError as exc:
+            # find_spec passed but the C extension failed to load - typically
+            # a compiled binary whose bundled PySide6 no longer matches the
+            # system Qt after a distribution upgrade. Degrade to the
+            # translucent Tk widget instead of dying without a window.
+            logger.warning(
+                "Widget: PySide6 present but failed to load (%s) - "
+                "using the translucent Tk widget instead",
+                exc,
+            )
+        else:
+            launch_widget_qt(
+                cookie=cookie,
+                interval=interval,
+                theme=theme,
+                size=size,
+                opacity=opacity,
+                position=position,
+                autorefresh=autorefresh,
+            )
+            return
 
     OllamaWidget(
         cookie=cookie,
