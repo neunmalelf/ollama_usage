@@ -90,6 +90,11 @@ _LABEL_COLOR   = "white"
 #: Color used for the session percentage (green, shown bold).
 _SESSION_PCT_COLOR = "green"
 
+#: Label of the credit-balance row in the full view, padded to the width of
+#: the request-row labels ("Web search requests: ") so all values line up.
+#: Shared so the Tk and the Qt full view stay identical.
+_CREDIT_LABEL = "Credit balance:      "
+
 POSITIONS = {
     "top-left":     lambda sw, sh, ww, wh: (10, 10),
     "top-right":    lambda sw, sh, ww, wh: (sw - ww - 10, 10),
@@ -97,9 +102,10 @@ POSITIONS = {
     "bottom-right": lambda sw, sh, ww, wh: (sw - ww - 10, sh - wh - 50),
 }
 
-# Widget dimensions
+# Widget dimensions (the full view holds the header, two bars and three
+# value rows: credit balance, web search and web fetch requests)
 _W_COMPACT = (560, 30)
-_W_FULL    = (240, 172)
+_W_FULL    = (240, 190)
 _BAR_W     = 200
 _BAR_H     = 8
 _PAD       = 14
@@ -194,10 +200,20 @@ def _mini_countdown_segments(seconds: int, theme: dict) -> list[tuple[str, str]]
     return segs
 
 
+def _credit_value(data: dict) -> str:
+    """Return the usage credit balance as a two-decimal string.
+
+    ``0.00`` when the settings page carries no credit section
+    (``credit_balance`` is ``None``), matching the compact line and the CLI.
+    """
+    credit = data.get("credit_balance")
+    return f"{credit:.2f}" if isinstance(credit, (int, float)) else "0.00"
+
+
 def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     """Return the minidisplay line as colored segments (no bars).
 
-    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) ws: <count> wr: <count>``
+    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) cr: <balance> ws: <count> wr: <count>``
     """
     plan = plan_display_name(data.get("plan", "")) if data.get("plan") else "—"
     session = data.get("session") or {}
@@ -206,6 +222,7 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     web_fetch = data.get("web_fetch_requests")
     ws = "0" if web_search is None else str(web_search)
     wr = "0" if web_fetch is None else str(web_fetch)
+    cr = _credit_value(data)
 
     segs: list[tuple[str, str]] = []
     segs.append(("olu ", theme["sub"]))
@@ -229,6 +246,8 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
         _seconds_until(weekly.get("resets_at", "")), theme
     ))
     segs.append((")", theme["sub"]))
+    segs.append((" cr: ", theme["sub"]))
+    segs.append((cr, theme[_VALUE_COLOR]))
     segs.append((" ws: ", theme["sub"]))
     segs.append((ws, theme[_VALUE_COLOR]))
     segs.append((" wr: ", theme["sub"]))
@@ -775,10 +794,18 @@ class OllamaWidget:
             )
             y += 20
 
+        # Value rows, same order as the compact line: credit balance first,
+        # then the request counts.
+        self._draw_segments(
+            c, bar_x, y,
+            [(_CREDIT_LABEL, t["sub"]), (_credit_value(self._data), t[_VALUE_COLOR])],
+            (_FONT, 8),
+        )
+
         ws = self._data.get("web_search_requests")
         if ws is not None:
             self._draw_segments(
-                c, bar_x, y,
+                c, bar_x, y + 18,
                 [("Web search requests: ", t["sub"]), (str(ws), t[_VALUE_COLOR])],
                 (_FONT, 8),
             )
@@ -786,7 +813,7 @@ class OllamaWidget:
         wr = self._data.get("web_fetch_requests")
         if wr is not None:
             self._draw_segments(
-                c, bar_x, y + 18,
+                c, bar_x, y + 36,
                 [("Web fetch requests:  ", t["sub"]), (str(wr), t[_VALUE_COLOR])],
                 (_FONT, 8),
             )

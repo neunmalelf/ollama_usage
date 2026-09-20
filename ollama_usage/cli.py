@@ -196,18 +196,21 @@ def _mini_line(data: dict, use_color: bool) -> str:
     weekly_left = _format_remaining_compact(data["weekly"]["resets_at"], use_color)
     web_search = data.get("web_search_requests")
     web_fetch = data.get("web_fetch_requests")
+    credit = data.get("credit_balance")
     ws = "0" if web_search is None else str(web_search)
     wr = "0" if web_fetch is None else str(web_fetch)
+    cr = f"{credit:.2f}" if isinstance(credit, (int, float)) else "0.00"
     if use_color:
         ws = f"{_ANSI[_VALUE_COLOR]}{ws}{_ANSI['reset']}"
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
+        cr = f"{_ANSI[_VALUE_COLOR]}{cr}{_ANSI['reset']}"
     sep = _ANSI[decorator_color] + "|" + _ANSI["reset"] if use_color else "|"
     paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
     paren_end = _ANSI[decorator_color] + ")" + _ANSI["reset"] if use_color else ")"
     return (
         f"olu {paren}{plan}{paren_end} s: {session_pct} {paren}{session_left}{paren_end}"
         f" {sep} w: {weekly_pct} {paren}{weekly_left}{paren_end}"
-        f" ws: {ws} wr: {wr}"
+        f" cr: {cr} ws: {ws} wr: {wr}"
     )
 
 
@@ -222,11 +225,14 @@ def _mini_horizontal(data: dict, use_color: bool) -> str:
     weekly_left = _format_remaining_compact(data["weekly"]["resets_at"], use_color)
     web_search = data.get("web_search_requests")
     web_fetch = data.get("web_fetch_requests")
+    credit = data.get("credit_balance")
     ws = "0" if web_search is None else str(web_search)
     wr = "0" if web_fetch is None else str(web_fetch)
+    cr = f"{credit:.2f}" if isinstance(credit, (int, float)) else "0.00"
     if use_color:
         ws = f"{_ANSI[_VALUE_COLOR]}{ws}{_ANSI['reset']}"
         wr = f"{_ANSI[_VALUE_COLOR]}{wr}{_ANSI['reset']}"
+        cr = f"{_ANSI[_VALUE_COLOR]}{cr}{_ANSI['reset']}"
     paren = _ANSI[decorator_color] + "(" + _ANSI["reset"] if use_color else "("
     paren_end = _ANSI[decorator_color] + ")" + _ANSI["reset"] if use_color else ")"
     return "\n".join(
@@ -234,6 +240,7 @@ def _mini_horizontal(data: dict, use_color: bool) -> str:
             f"olu {paren}{plan}{paren_end}",
             f"s: {session_pct} {paren}{session_left}{paren_end}",
             f"w: {weekly_pct} {paren}{weekly_left}{paren_end}",
+            f"cr: {cr}",
             f"ws: {ws}",
             f"wr: {wr}",
         ]
@@ -605,9 +612,10 @@ def main():
         "--minidisplay",
         action="store_true",
         help="Single-line compact output, e.g.:\n"
-        "  olu (PRO) s: 42.0 %% (02:46) | w: 77.0 %% (1d 06:46) ws: 2 wr: 0\n"
+        "  olu (PRO) s: 42.0 %% (02:46) | w: 77.0 %% (1d 06:46) cr: 4.51 ws: 2 wr: 0\n"
         "  olu = ollama usage, (PRO) = your plan name\n"
         "  s  = session usage, w = weekly usage (percent used)\n"
+        "  cr = usage credit balance\n"
         "  ws = web search requests this session\n"
         "  wr = web fetch requests this session\n"
         "  remaining time is [dd] hh:mm (days omitted when zero)",
@@ -619,6 +627,7 @@ def main():
         "  olu (PRO)\n"
         "  s:  42.0 %% (02:46)\n"
         "  w:  77.0 %% (1d 06:46)\n"
+        "  cr: 4.51\n"
         "  ws: 2\n"
         "  wr: 0 [auto-refresh-timer]",
     )
@@ -632,6 +641,7 @@ def main():
         "  weekly.resets_at         ISO-8601 UTC reset timestamp\n"
         "  web_search_requests      int, null when absent\n"
         "  web_fetch_requests       int, null when absent\n"
+        "  credit_balance           float, null when absent\n"
         "  models                   list of {name, requests}, absent when empty",
     )
     parser.add_argument("--cookie", type=str, help="Manual __Secure-session cookie")

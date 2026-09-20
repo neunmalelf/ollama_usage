@@ -20,6 +20,7 @@ def make_html(
     weekly_time: str = "2026-04-06T00:00:00Z",
     web_search_requests: int | None = None,
     web_fetch_requests: int | None = None,
+    credit_html: str = "",
     models: list[tuple[str, int]] | None = None,
 ) -> str:
     """Build a minimal but realistic settings page HTML fragment."""
@@ -51,6 +52,7 @@ def make_html(
     <span class="text-sm">{weekly_pct}% used</span>
     <div class="local-time" data-time="{weekly_time}">Resets soon</div>
     {segment}
+    {credit_html}
     {models_html}
     """
 
@@ -424,6 +426,7 @@ class TestReversedOrderParsing:
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
             "web_fetch_requests": None,
+            "credit_balance": None,
             "models": None,
         }
 
@@ -479,6 +482,7 @@ class TestRealPageLayout:
             "weekly": {"used_pct": 80.0, "resets_at": "2026-08-24T00:00:00Z"},
             "web_search_requests": None,
             "web_fetch_requests": None,
+            "credit_balance": None,
             "models": None,
         }
 
@@ -491,6 +495,45 @@ class TestRealPageLayout:
 
 
 # ---------------------------------------------------------------------------
+# Credit balance
+# ---------------------------------------------------------------------------
+
+class TestCreditBalance:
+
+    @pytest.mark.parametrize(
+        "amount, expected",
+        [
+            ("$4.51", 4.51),
+            ("$0.00", 0.0),
+            ("$12.00", 12.0),
+            ("$1,234.56", 1234.56),
+            ("12,5", 12.5),
+            ("€7,25", 7.25),
+        ],
+    )
+    def test_amount_before_current_balance_label(self, amount: str, expected: float) -> None:
+        html = make_html(credit_html=f"<span>{amount}</span> Current balance")
+        assert parse_html(html)["credit_balance"] == expected
+
+    def test_label_with_intervening_tags(self) -> None:
+        html = make_html(
+            credit_html='<div><span class="tabular-nums">$4.51</span>'
+            "<span>Current balance</span></div>"
+        )
+        assert parse_html(html)["credit_balance"] == 4.51
+
+    def test_make_html_helper(self) -> None:
+        html = make_html(credit_html='<span class="text-sm">$4.51</span> Current balance')
+        assert parse_html(html)["credit_balance"] == 4.51
+
+    def test_absent_is_none(self, free_html: str) -> None:
+        assert parse_html(free_html)["credit_balance"] is None
+
+    def test_type_is_float(self) -> None:
+        html = make_html(credit_html="$4.51 Current balance")
+        assert isinstance(parse_html(html)["credit_balance"], float)
+
+
 # Output structure
 # ---------------------------------------------------------------------------
 
@@ -499,14 +542,14 @@ class TestOutputStructure:
     def test_top_level_keys(self, free_html: str) -> None:
         assert set(parse_html(free_html).keys()) == {
             "plan", "session", "weekly", "web_search_requests",
-            "web_fetch_requests", "models"
+            "web_fetch_requests", "credit_balance", "models"
         }
 
     def test_full_structure(self, pro_html: str) -> None:
         data = parse_html(pro_html)
         assert set(data.keys()) == {
             "plan", "session", "weekly", "web_search_requests",
-            "web_fetch_requests", "models"
+            "web_fetch_requests", "credit_balance", "models"
         }
         assert set(data["session"].keys()) == {"used_pct", "resets_at"}
         assert set(data["weekly"].keys()) == {"used_pct", "resets_at"}
@@ -522,6 +565,7 @@ class TestOutputStructure:
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
             "web_fetch_requests": None,
+            "credit_balance": None,
             "models": None,
         }
 

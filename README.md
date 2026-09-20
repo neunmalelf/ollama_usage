@@ -216,10 +216,10 @@ Model calls this week:
 
 ### Minidisplay output
 ```
-olu (PRO) s:   2.6 % (02:46) | w:   1.9 % (1d 06:46) ws: 2 wr: 0
+olu (PRO) s:   2.6 % (02:46) | w:   1.9 % (1d 06:46) cr: 4.51 ws: 2 wr: 0
 ```
 
-`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). By default a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line (disable with `--autorefresh-off`).
+`--minidisplay` prints one compact line: the plan name in parentheses after `olu`, then session percentage and remaining time, weekly percentage and remaining time, the usage credit balance (`cr`, two decimals — `0.00` when the page has no credit section), and the web search (`ws`) and web fetch (`wr`) request counts. Remaining time is `[dd] hh:mm` (days omitted when zero). By default a grey `(mm:ss)` countdown is appended and refreshed in place at the end of the line (disable with `--autorefresh-off`).
 
 `--minidisplay-horizontal` shows the same information, but each item on its own line:
 
@@ -227,6 +227,7 @@ olu (PRO) s:   2.6 % (02:46) | w:   1.9 % (1d 06:46) ws: 2 wr: 0
 olu (PRO)
 s:   2.6 % (02:46)
 w:   1.9 % (1d 06:46)
+cr:  4.51
 ws:  2
 wr:  0
 ```
@@ -256,14 +257,16 @@ Format: `<subscription>;<percent_used_session>;<seconds_until_session_reset>;<pe
   "weekly":  { "used_pct": 57.7, "resets_at": "2026-09-14T00:00:00Z" },
   "web_search_requests": 35,
   "web_fetch_requests": null,
+  "credit_balance": 4.51,
   "models": [ { "name": "glm-5.3-flash", "requests": 1293 } ]
 }
 ```
 
 Fields: `plan` is the raw plan name; `session`/`weekly` carry `used_pct`
 (one decimal) and `resets_at` (ISO-8601 UTC timestamp); `web_search_requests`
-and `web_fetch_requests` are `int` or `null`; `models` is a list of
-`{name, requests}` and absent when empty.
+and `web_fetch_requests` are `int` or `null`; `credit_balance` is the usage
+credit / current balance from the settings page (`float` or `null`); `models`
+is a list of `{name, requests}` and absent when empty.
 
 Terminal colors (ANSI, self-contained — no external dependency):
 - Plan name — **orange**
@@ -285,6 +288,7 @@ Terminal colors (ANSI, self-contained — no external dependency):
   },
   "web_search_requests": 2,
   "web_fetch_requests": 0,
+  "credit_balance": null,
   "models": [
     {"name": "glm-5.2", "requests": 2},
     {"name": "web search", "requests": 2},
@@ -294,7 +298,7 @@ Terminal colors (ANSI, self-contained — no external dependency):
 }
 ```
 
-`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
+`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `credit_balance` is the "Usage credit / Current balance" amount (two-decimal float, `null` when the section is absent). `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
 
 ---
 
