@@ -34,6 +34,8 @@ from ollama_usage.widget import (
     _W_FULL,
     POSITIONS,
     THEMES,
+    _compact_indicator_gap,
+    _compact_window_width,
     _countdown_segments,
     _credit_value,
     _fit_compact_segments,
@@ -159,8 +161,33 @@ class TransparentWidget(QWidget):
         return "full"
 
     def _apply_size(self) -> None:
-        w, h = _W_FULL if self._size == "full" else _W_COMPACT
+        w, h = self._window_size()
         self.setFixedSize(w, h)
+
+    def _window_size(self) -> tuple[int, int]:
+        """Return the (w, h) for the current size mode.
+
+        The compact window auto-fits its content (fixed height, width from
+        the measured line) using Qt font metrics; falls back to the fixed
+        ``_W_COMPACT`` width while data has not arrived yet.
+        """
+        if self._size != "compact":
+            return _W_FULL
+        # Loading/error states draw a centered message — keep the fixed
+        # fallback width so the text has room.
+        if getattr(self, "_error", None) or getattr(self, "_data", None) is None:
+            return _W_COMPACT
+        font = _font(8)
+        metrics = QFontMetrics(font)
+        indicator = self._indicator_letter()
+        segments = _mini_segments(
+            self._data, self._theme,
+            credit_alert=getattr(self, "_credit_alert", None),
+        )
+        w = _compact_window_width(
+            segments, indicator, metrics.horizontalAdvance, 10,
+        )
+        return (w, _W_COMPACT[1])
 
     def _toggle_size(self) -> None:
         self._size = "compact" if self._size == "full" else "full"
@@ -226,6 +253,9 @@ class TransparentWidget(QWidget):
         if self._is_fetching.is_set():
             return
         self._timer.stop()
+        # The compact window hugs its content: re-apply the size before
+        # repainting (no-op for the fixed-size full view).
+        self._apply_size()
         self.update()
         QTimer.singleShot(self._interval * 1000, _Callback(self._fetch_async))
 
@@ -298,8 +328,10 @@ class TransparentWidget(QWidget):
         indicator = self._indicator_letter()
         font = _font(8)
         metrics = QFontMetrics(font)
-        # The line starts at x=p; reserve padding plus the indicator + a gap.
-        max_x = w - 2 * p - metrics.horizontalAdvance(indicator) - 6
+        # Auto-fit window: line may use the full width minus padding on both
+        # sides and the indicator letter plus its gap (about two spaces).
+        indicator_gap = _compact_indicator_gap(indicator, metrics.horizontalAdvance)
+        max_x = w - p - indicator_gap - metrics.horizontalAdvance(indicator) - p
         segments = _fit_compact_segments(
             _mini_segments(
                 self._data, t, credit_alert=getattr(self, "_credit_alert", None)

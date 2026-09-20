@@ -480,9 +480,11 @@ class TestCompactFitDraw:
         ]
 
     def test_long_plan_ellipsized_quota_values_visible(self) -> None:
+        # The compact window now auto-fits its content, so even a very long
+        # plan fits fully instead of being ellipsized.
         texts = self._draw("deepseek-v4-flash:cloud")
         joined = "".join(texts)
-        assert "…" in joined
+        assert "DEEPSEEK-V4-FLASH:CLOUD" in joined
         assert "ws: 12" in joined
         assert "wr: 4" in joined
 
