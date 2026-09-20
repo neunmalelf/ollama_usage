@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Usage credit balance: the "Usage credit / Current balance" value on
+  ollama.com/settings is parsed and exposed as `credit_balance` (float or
+  null) in the usage dict/JSON. The compact applet views now show it before
+  the web-search count as `cr: <balance> ` — two decimals, `0.00` when the
+  page has no credit section — in `--minidisplay`, `--minidisplay-horizontal`
+  and the desktop widget (Tk and Qt) compact line.
 - `--dataonly`: prints one machine-readable line for scripts and agents —
   `subscription;percent_session;seconds_to_session_reset;percent_weekly;seconds_to_weekly_reset;ws;wr`
   (single fetch, no colors/countdown; e.g.

@@ -50,13 +50,14 @@ Show the program version and exit.
 Single-line compact output, e.g.:
 .sp
 .nf
-olu (PRO) s: 42.0 % (02:46) | w: 77.0 % (1d 06:46) ws: 2 wr: 0
+olu (PRO) s: 42.0 % (02:46) | w: 77.0 % (1d 06:46) cr: 4.51 ws: 2 wr: 0
 .fi
 .sp
 .RS
 .nf
 olu = ollama usage, (PRO) = your plan name
 s   = session usage,   w = weekly usage (percent used)
+cr  = usage credit balance (two decimals, 0.00 when absent)
 ws  = web search requests this session
 wr  = web fetch requests this session
 .fi
@@ -74,6 +75,7 @@ Multi-line compact output, one item per line:
 olu (PRO)
 s: 42.0 % (02:46)
 w: 77.0 % (1d 06:46)
+cr: 4.51
 ws: 2
 wr: 0 [auto-refresh-timer]
 .fi
@@ -110,7 +112,9 @@ Output the usage as JSON.  The top-level object contains the fields
 .IR weekly
 (\fIused_pct\fR, \fIresets_at\fR),
 .IR web_search_requests ,
-.IR web_fetch_requests
+.IR web_fetch_requests ,
+.IR credit_balance
+(the "Usage credit" / "Current balance" amount, null when absent)
 and
 .IR models
 (a list of \fI{name, requests}\fR objects).  Fields are

@@ -102,6 +102,7 @@ def _make_data(**overrides) -> dict:
         "weekly": {"used_pct": 1.9, "resets_at": "2026-04-06T00:00:00Z"},
         "web_search_requests": 2,
         "web_fetch_requests": 0,
+        "credit_balance": None,
     }
     data.update(overrides)
     return data
@@ -112,7 +113,9 @@ class TestMiniSegments:
     def test_layout_matches_minidisplay(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text == "olu (PRO) s: 2.6 % (00:00) | w: 1.9 % (00:00) ws: 2 wr: 0"
+        assert text == (
+            "olu (PRO) s: 2.6 % (00:00) | w: 1.9 % (00:00) cr: 0.00 ws: 2 wr: 0"
+        )
 
     def test_plan_is_orange(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
@@ -143,6 +146,27 @@ class TestMiniSegments:
         segs = w._mini_segments(_make_data(web_fetch_requests=5), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
         assert text.endswith(" wr: 5")
+
+    def test_credit_balance_shown_before_web_search(self) -> None:
+        segs = w._mini_segments(_make_data(credit_balance=4.51), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert " cr: 4.51 ws: 2 wr: 0" in text
+        assert text.index("cr: 4.51") < text.index("ws:")
+
+    def test_credit_balance_formatted_with_two_decimals(self) -> None:
+        segs = w._mini_segments(_make_data(credit_balance=12), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert " cr: 12.00 " in text
+
+    def test_credit_balance_absent_shows_zero(self) -> None:
+        segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
+        text = "".join(t for t, _ in segs)
+        assert " cr: 0.00 " in text
+
+    def test_credit_balance_uses_value_color(self) -> None:
+        segs = w._mini_segments(_make_data(credit_balance=4.51), w.THEMES["minimal"])
+        balance = next(t for t, c in segs if c == w.THEMES["minimal"][w._VALUE_COLOR])
+        assert balance == "4.51"
 
     def test_countdown_compact_format(self) -> None:
         segs = w._mini_countdown_segments(90061, w.THEMES["minimal"])
@@ -232,6 +256,52 @@ class TestDrawFullWebSearch:
             if kwargs.get("text") == "4"
         ]
         assert value_fills and value_fills[0] == value_color
+
+
+class TestDrawFullCreditBalance:
+    """The full view (the default widget size) shows the credit balance."""
+
+    def _rows(self, **overrides) -> list[tuple[int, str, str]]:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._canvas = MagicMock()
+        inst._canvas.bbox.return_value = (0, 0, 10, 10)
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "full"
+        inst._data = _make_data(**overrides)
+        inst._error = None
+        inst._autorefresh = False
+        inst._draw_full()
+        rows = []
+        for args, kwargs in inst._canvas.create_text.call_args_list:
+            text = kwargs.get("text", args[1] if len(args) > 1 else None)
+            rows.append((args[1] if len(args) > 1 else 0, text, kwargs.get("fill")))
+        return rows
+
+    def test_credit_balance_row_is_shown(self) -> None:
+        rows = self._rows(credit_balance=4.51)
+        assert any("Credit balance:" in (text or "") for _, text, _ in rows)
+        value_color = w.THEMES["minimal"][w._VALUE_COLOR]
+        assert [text for _, text, fill in rows if fill == value_color] == [
+            "4.51", "2", "0",
+        ]
+
+    def test_credit_balance_row_sits_above_the_request_rows(self) -> None:
+        rows = self._rows(credit_balance=4.51)
+        y_credit = next(y for y, text, _ in rows if "Credit balance:" in (text or ""))
+        y_web_search = next(y for y, text, _ in rows if text == "Web search requests: ")
+        y_web_fetch = next(y for y, text, _ in rows if text == "Web fetch requests:  ")
+        assert y_credit < y_web_search < y_web_fetch
+
+    def test_absent_credit_balance_shows_zero(self) -> None:
+        rows = self._rows(credit_balance=None)
+        value_color = w.THEMES["minimal"][w._VALUE_COLOR]
+        assert "0.00" in [text for _, text, fill in rows if fill == value_color]
+
+    def test_last_value_row_fits_the_full_view(self) -> None:
+        # Row height of the 8-point font used by the value rows.
+        row_height = 12
+        rows = self._rows(credit_balance=4.51)
+        assert max(y for y, _, _ in rows) + row_height <= w._W_FULL[1]
 
 class TestStatusIndicator:
 

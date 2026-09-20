@@ -51,6 +51,15 @@ _WEB_FETCH_SEGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Usage credit / current balance: an amount (optionally prefixed with a
+# currency symbol) rendered right before the "Current balance" label of the
+# "Usage credit" section, e.g. "<span>$4.51</span>Current balance". The
+# amount and the label may be separated by closing tags and whitespace.
+_CREDIT_BALANCE_RE = re.compile(
+    r"([$€£]?\s*[\d.,]+)\s*(?:<[^>]*>\s*)*Current\s+balance",
+    re.IGNORECASE,
+)
+
 # Per-model request counts in the "Models used this week" list.
 # Each row: <span title="NAME">NAME</span> <span ...> N requests </span>
 _MODELS_LIST_MARKER = "models used this week"
@@ -74,6 +83,7 @@ class UsageData:
     weekly: PeriodUsage
     web_search_requests: int | None = None
     web_fetch_requests: int | None = None
+    credit_balance: float | None = None
     models: list[dict[str, int]] | None = None
 
     def to_dict(self) -> dict:
@@ -88,6 +98,7 @@ class UsageData:
             "weekly": _period(self.weekly),
             "web_search_requests": self.web_search_requests,
             "web_fetch_requests": self.web_fetch_requests,
+            "credit_balance": self.credit_balance,
             "models": self.models,
         }
 
@@ -234,6 +245,27 @@ def _extract_web_fetch_requests(html: str) -> int | None:
     return sum(int(c) for c in counts)
 
 
+def _extract_credit_balance(html: str) -> float | None:
+    """Extract the usage credit / current balance shown on the page.
+
+    The balance is rendered as an amount (optionally prefixed with a currency
+    symbol) directly before the "Current balance" label. Returns None when
+    the section is absent (e.g. plans without usage credit).
+    """
+    match = _CREDIT_BALANCE_RE.search(html)
+    if not match:
+        return None
+    raw = re.sub(r"[^\d.,]", "", match.group(1))  # drop currency symbol/space
+    if "," in raw and "." in raw:
+        raw = raw.replace(",", "")  # 1,234.56 — comma is a thousands separator
+    elif "," in raw:
+        raw = raw.replace(",", ".")  # 4,51 — comma is a decimal separator
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def _extract_models(html: str) -> list[dict[str, int]] | None:
     """Extract the per-model request counts from the "Models used this week" list.
 
@@ -262,13 +294,14 @@ def parse_html(html: str) -> dict:
     session_pct, weekly_pct, session_time, weekly_time = _extract_usage(html)
     web_search_requests = _extract_web_search_requests(html)
     web_fetch_requests = _extract_web_fetch_requests(html)
+    credit_balance = _extract_credit_balance(html)
     models = _extract_models(html)
     logger.debug("Parsing HTML...")
     logger.debug(
         "Parsed: plan=%s session=%.1f%% weekly=%.1f%% "
-        "web_search_requests=%s web_fetch_requests=%s models=%s",
+        "web_search_requests=%s web_fetch_requests=%s credit_balance=%s models=%s",
         plan, session_pct, weekly_pct, web_search_requests, web_fetch_requests,
-        "None" if models is None else len(models),
+        credit_balance, "None" if models is None else len(models),
     )
     return UsageData(
         plan=plan,
@@ -276,6 +309,7 @@ def parse_html(html: str) -> dict:
         weekly=PeriodUsage(used_pct=weekly_pct, resets_at=weekly_time),
         web_search_requests=web_search_requests,
         web_fetch_requests=web_fetch_requests,
+        credit_balance=credit_balance,
         models=models,
     ).to_dict()
 

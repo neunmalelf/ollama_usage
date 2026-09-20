@@ -111,6 +111,7 @@ class TestSanitizeCookie:
 def make_data(session_pct: float = 0.0, weekly_pct: float = 0.0,
               web_search_requests: int | None = None,
               web_fetch_requests: int | None = None,
+              credit_balance: float | None = None,
               models: list | None = None) -> dict:
     return {
         "plan": "free",
@@ -118,6 +119,7 @@ def make_data(session_pct: float = 0.0, weekly_pct: float = 0.0,
         "weekly":  {"used_pct": weekly_pct,  "resets_at": "2026-04-06T00:00:00Z"},
         "web_search_requests": web_search_requests,
         "web_fetch_requests": web_fetch_requests,
+        "credit_balance": credit_balance,
         "models": models,
     }
 
@@ -421,7 +423,7 @@ class TestMiniLine:
         line = _mini_line(data, use_color=False)
         assert line.startswith("olu (FREE) s:  42.0 % (")
         assert " | w:  77.0 % (" in line
-        assert " ws: 2 wr: 0" in line
+        assert " cr: 0.00 ws: 2 wr: 0" in line
     def test_web_fetch_shown_when_present(self) -> None:
         data = make_data(42.0, 77.0, web_fetch_requests=5)
         line = _mini_line(data, use_color=False)
@@ -431,6 +433,28 @@ class TestMiniLine:
         data = make_data(42.0, 77.0)
         line = _mini_line(data, use_color=False)
         assert " ws: 0 wr: 0" in line
+
+    def test_credit_balance_shown_before_web_search(self) -> None:
+        data = make_data(42.0, 77.0, credit_balance=4.51)
+        line = _mini_line(data, use_color=False)
+        assert " cr: 4.51 ws: 0 wr: 0" in line
+        assert line.index("cr: 4.51") < line.index("ws:")
+
+    def test_credit_balance_formatted_with_two_decimals(self) -> None:
+        data = make_data(42.0, 77.0, credit_balance=12)
+        line = _mini_line(data, use_color=False)
+        assert " cr: 12.00 " in line
+
+    def test_credit_balance_absent_shows_zero(self) -> None:
+        data = make_data(42.0, 77.0)
+        line = _mini_line(data, use_color=False)
+        assert " cr: 0.00 " in line
+
+    def test_color_wraps_credit_balance(self) -> None:
+        from ollama_usage.cli import _ANSI
+        data = make_data(42.0, 77.0, credit_balance=4.51)
+        line = _mini_line(data, use_color=True)
+        assert _ANSI["cyan"] + "4.51" + _ANSI["reset"] in line
 
     def test_color_wraps_plan_and_web_search(self) -> None:
         from ollama_usage.cli import _ANSI
@@ -450,17 +474,25 @@ class TestMiniHorizontal:
         data = make_data(42.0, 77.0, web_search_requests=2)
         out = _mini_horizontal(data, use_color=False)
         lines = out.split("\n")
-        assert len(lines) == 5
+        assert len(lines) == 6
         assert lines[0] == "olu (FREE)"
         assert lines[1].startswith("s:  42.0 % (")
         assert lines[2].startswith("w:  77.0 % (")
-        assert lines[3] == "ws: 2"
-        assert lines[4] == "wr: 0"
+        assert lines[3] == "cr: 0.00"
+        assert lines[4] == "ws: 2"
+        assert lines[5] == "wr: 0"
 
     def test_web_search_absent_shows_zero(self) -> None:
         data = make_data(42.0, 77.0)
         out = _mini_horizontal(data, use_color=False)
-        assert out.endswith("\nws: 0\nwr: 0")
+        assert out.endswith("\ncr: 0.00\nws: 0\nwr: 0")
+
+    def test_credit_balance_shown_before_web_search(self) -> None:
+        data = make_data(42.0, 77.0, credit_balance=4.51)
+        out = _mini_horizontal(data, use_color=False)
+        lines = out.split("\n")
+        assert lines[3] == "cr: 4.51"
+        assert lines.index("ws: 0") > lines.index("cr: 4.51")
 
     def test_color_wraps_plan_and_web_search(self) -> None:
         from ollama_usage.cli import _ANSI
@@ -493,10 +525,10 @@ class TestDisplayMinidisplay:
             as_json=False, quiet=False, minidisplay_horizontal=True,
         )
         out = capsys.readouterr().out
-        assert out.count("\n") == 5
+        assert out.count("\n") == 6
         assert out.startswith("olu (FREE)")
         assert "\ns:  42.0 % (" in out
-        assert "\nws: 2\nwr: 0" in out
+        assert "\ncr: 0.00\nws: 2\nwr: 0" in out
 
 
 class TestAutorefreshSleepMini:
