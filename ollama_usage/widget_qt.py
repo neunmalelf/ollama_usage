@@ -22,6 +22,7 @@ from ollama_usage.scraper import get_usage, plan_display_name
 from ollama_usage.widget import (
     _BAR_H,
     _BAR_W,
+    _CREDIT_LABEL,
     _FONT,
     _LABEL_COLOR,
     _PAD,
@@ -34,6 +35,7 @@ from ollama_usage.widget import (
     POSITIONS,
     THEMES,
     _countdown_segments,
+    _credit_value,
     _fit_compact_segments,
     _load_state,
     _mini_segments,
@@ -379,10 +381,18 @@ class TransparentWidget(QWidget):
             )
             y += 20
 
+        # Value rows, same order as the compact line: credit balance first,
+        # then the request counts.
+        self._draw_segments(
+            painter, bar_x, y,
+            [(_CREDIT_LABEL, t["sub"]), (_credit_value(self._data), t[_VALUE_COLOR])],
+            small_font,
+        )
+
         ws = self._data.get("web_search_requests")
         if ws is not None:
             self._draw_segments(
-                painter, bar_x, y,
+                painter, bar_x, y + 18,
                 [("Web search requests: ", t["sub"]), (str(ws), t[_VALUE_COLOR])],
                 small_font,
             )
@@ -390,7 +400,7 @@ class TransparentWidget(QWidget):
         wr = self._data.get("web_fetch_requests")
         if wr is not None:
             self._draw_segments(
-                painter, bar_x, y + 18,
+                painter, bar_x, y + 36,
                 [("Web fetch requests:  ", t["sub"]), (str(wr), t[_VALUE_COLOR])],
                 small_font,
             )
