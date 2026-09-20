@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The compact widget window hugged its content again: it had a fixed 560 px
+  width, so with `--background-transparent` a wide dead zone (often >100 px)
+  appeared between the values and the status letter. The width now auto-fits
+  the line — padding + line + a two-space gap + indicator + padding (Tk and
+  Qt, min 220 px; loading/error states keep the roomy fallback width).
 - `--widget --background-transparent` no longer dies when PySide6 is present
   but its C extension fails to load (e.g. a compiled binary built against an
   older Qt than the system one after a distribution update - the failure was

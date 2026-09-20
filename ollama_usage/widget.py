@@ -117,6 +117,9 @@ _FONT      = "Helvetica"
 #: Sentinel color made fully transparent via ``-transparentcolor``. It must
 #: not collide with any theme color.
 _TRANSPARENT_COLOR = "#000001"
+#: Narrowest compact window so it stays visible and draggable even when the
+#: line is very short (loading/error states draw centered in the full width).
+_W_COMPACT_MIN = 220
 #: Default whole-window opacity.
 _DEFAULT_OPACITY = 0.92
 #: Default window opacity when ``--background-transparent`` is given.
@@ -332,6 +335,36 @@ def _fit_compact_segments(
     return fitted
 
 
+def _compact_indicator_gap(indicator: str, measure: Callable[[str], int]) -> int:
+    """Return the px gap between the line's last glyph and the indicator letter.
+
+    ``measure`` maps text to its pixel width. The gap is about two space
+    widths so the indicator does not glue to the line.
+    """
+    return max(4, measure(" ") * 2)
+
+
+def _compact_window_width(
+    segments: list[tuple[str, str]],
+    indicator: str,
+    measure: Callable[[str], int],
+    padding: int,
+) -> int:
+    """Return the pixel width for a compact window that hugs its content.
+
+    Layout: left padding + line + gap + indicator + right padding. The
+    window is never narrower than ``_W_COMPACT_MIN`` so it stays visible
+    and grabbable even for very short lines.
+    """
+    line_w = sum(measure(text) for text, _ in segments)
+    return max(
+        _W_COMPACT_MIN,
+        padding + line_w
+        + _compact_indicator_gap(indicator, measure)
+        + measure(indicator) + padding,
+    )
+
+
 def _load_state() -> dict:
     """Return widget settings from INI format."""
     parser = configparser.ConfigParser()
@@ -477,7 +510,7 @@ class OllamaWidget:
 
     def _setup_canvas(self) -> None:
         t = self._theme
-        w, h = _W_FULL if self._size == "full" else _W_COMPACT
+        w, h = self._window_size()
         # Keep the window fully on screen when its size changes (toggle).
         try:
             x = max(0, min(self._root.winfo_x(), self._root.winfo_screenwidth() - w - 10))
@@ -542,10 +575,37 @@ class OllamaWidget:
             return saved
         return "full"
 
+    def _window_size(self) -> tuple[int, int]:
+        """Return the (w, h) for the current size mode.
+
+        The compact window auto-fits its content: fixed height, width =
+        padding + line + gap + indicator + padding (min ``_W_COMPACT_MIN``).
+        Falls back to the fixed ``_W_COMPACT`` width when no font is
+        measurable (headless).
+        """
+        if self._size != "compact":
+            return _W_FULL
+        # Loading/error states draw a centered message — keep the fixed
+        # fallback width so the text has room. getattr: _window_size can run
+        # before the fetch state exists (tests, early init).
+        if getattr(self, "_error", None) or getattr(self, "_data", None) is None:
+            return _W_COMPACT
+        font = _compact_font()
+        if font is None:
+            return _W_COMPACT
+        indicator = self._indicator_letter()
+        segments = _mini_segments(
+            self._data, self._theme, credit_alert=getattr(self, "_credit_alert", None)
+        )
+        w = _compact_window_width(
+            segments, indicator, font.measure, 10,
+        )
+        return (w, _W_COMPACT[1])
+
     def _restore_position(self) -> None:
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
-        ww, wh = _W_FULL if self._size == "full" else _W_COMPACT
+        ww, wh = self._window_size()
 
         default_x, default_y = sw - ww - 10, 10
         x, y = default_x, default_y
@@ -696,7 +756,7 @@ class OllamaWidget:
 
     def _draw_compact(self) -> None:
         c, t   = self._canvas, self._theme
-        w, h   = _W_COMPACT
+        w, h   = self._window_size()
         p      = 10  # padding for the compact view (room before the "M" indicator)
 
         if self._error or not self._data:
@@ -716,9 +776,11 @@ class OllamaWidget:
             )
             draw_font: tuple | tkfont.Font = (_FONT, 8)
         else:
-            # The line starts at x=p, so reserve padding on both sides plus
-            # the indicator width and a small gap before it.
-            max_x = w - 2 * p - font.measure(indicator) - 6
+            # Auto-fit window: the line may use the full width minus padding
+            # on both sides and the indicator letter plus its gap (about two
+            # space widths).
+            indicator_gap = _compact_indicator_gap(indicator, font.measure)
+            max_x = w - p - indicator_gap - font.measure(indicator) - p
             segments = _fit_compact_segments(
                 _mini_segments(
                     self._data, t, credit_alert=getattr(self, "_credit_alert", None)

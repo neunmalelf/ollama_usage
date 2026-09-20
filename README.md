@@ -452,7 +452,7 @@ launch_gui(cookie=get_cookie_auto)
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
 | `--theme` | `dark`, `light`, `minimal` | *(widget: `dark`; GUI: saved darkmode)* | Color scheme for the widget and the GUI (`--theme dark` forces GUI dark mode, `light`/`minimal` force light) |
-| `--size` | `full`, `compact` | `full` | `full` shows bars + countdown; `compact` shows text only |
+| `--size` | `full`, `compact` | `full` | `full` shows bars + countdown; `compact` shows text only and its window width auto-fits the line (no dead space before the status letter) |
 | `--opacity` | `0.1` – `1.0` | `0.92` | Window opacity (`0.80` with `--background-transparent`) |
 | `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |
 | `--background-transparent` | – | off | Fully transparent background — the text/bars float over the wallpaper. Native on Windows; needs **PySide6** on Linux/macOS (otherwise falls back to a translucent window) |
