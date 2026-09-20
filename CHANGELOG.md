@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Qt compact widget painted its line against the old fixed 560 px width
+  while the window auto-fits its content, so the `A`/`M` status letter was
+  anchored beyond the visible window edge and disappeared (most visible with
+  `--background-transparent`). The paint box now matches the actual window
+  size.
 - The compact widget window hugged its content again: it had a fixed 560 px
   width, so with `--background-transparent` a wide dead zone (often >100 px)
   appeared between the values and the status letter. The width now auto-fits

@@ -315,7 +315,10 @@ class TransparentWidget(QWidget):
             self._paint_full(painter, t)
 
     def _paint_compact(self, painter: QPainter, t: dict) -> None:
-        w, h = _W_COMPACT
+        # Match the paint box to the actual (auto-fitted) window size: the
+        # fixed _W_COMPACT width would anchor the indicator letter outside
+        # the visible area once the window hugs its content.
+        w, h = self._window_size()
         p = 10  # padding (room before the indicator letter)
 
         if self._error or not self._data:
