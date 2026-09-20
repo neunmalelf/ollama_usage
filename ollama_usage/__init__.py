@@ -14,7 +14,7 @@ from ollama_usage.exceptions import (
     UnsupportedOSError,
 )
 
-__version__ = "3.0.20260920163534Z"
+__version__ = "3.0.20260920171400Z"
 
 __all__ = [
     "__version__",

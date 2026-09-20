@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `--dataonly`: the usage credit balance is appended as an eighth
+  semicolon-separated field (`...;ws;wr;credit_balance`, two decimals,
+  `0.00` when the page has no credit section).
+- `--credit-alert AMOUNT`: colors the widget credit balance (`cr:`) red when
+  it drops below AMOUNT (default: 1.0; a negative value disables the
+  recolor).
 - Usage credit balance: the "Usage credit / Current balance" value on
   ollama.com/settings is parsed and exposed as `credit_balance` (float or
   null) in the usage dict/JSON. The compact applet views now show it before

@@ -95,6 +95,10 @@ _SESSION_PCT_COLOR = "green"
 #: Shared so the Tk and the Qt full view stay identical.
 _CREDIT_LABEL = "Credit balance:      "
 
+#: Color name used for the credit balance when it drops below the alert
+#: threshold (--credit-alert).
+_CREDIT_ALERT_COLOR = "red"
+
 POSITIONS = {
     "top-left":     lambda sw, sh, ww, wh: (10, 10),
     "top-right":    lambda sw, sh, ww, wh: (sw - ww - 10, 10),
@@ -210,10 +214,15 @@ def _credit_value(data: dict) -> str:
     return f"{credit:.2f}" if isinstance(credit, (int, float)) else "0.00"
 
 
-def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
+def _mini_segments(
+    data: dict, theme: dict, credit_alert: float | None = None,
+) -> list[tuple[str, str]]:
     """Return the minidisplay line as colored segments (no bars).
 
     ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) cr: <balance> ws: <count> wr: <count>``
+
+    When ``credit_alert`` is set and the balance drops below it, the balance
+    value is drawn in the theme's red instead of the value color.
     """
     plan = plan_display_name(data.get("plan", "")) if data.get("plan") else "—"
     session = data.get("session") or {}
@@ -223,6 +232,11 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     ws = "0" if web_search is None else str(web_search)
     wr = "0" if web_fetch is None else str(web_fetch)
     cr = _credit_value(data)
+    credit = data.get("credit_balance")
+    cr_color = _CREDIT_ALERT_COLOR if (
+        credit_alert is not None and isinstance(credit, (int, float))
+        and credit < credit_alert
+    ) else _VALUE_COLOR
 
     segs: list[tuple[str, str]] = []
     segs.append(("olu ", theme["sub"]))
@@ -247,7 +261,7 @@ def _mini_segments(data: dict, theme: dict) -> list[tuple[str, str]]:
     ))
     segs.append((")", theme["sub"]))
     segs.append((" cr: ", theme["sub"]))
-    segs.append((cr, theme[_VALUE_COLOR]))
+    segs.append((cr, theme[cr_color]))
     segs.append((" ws: ", theme["sub"]))
     segs.append((ws, theme[_VALUE_COLOR]))
     segs.append((" wr: ", theme["sub"]))
@@ -385,6 +399,7 @@ class OllamaWidget:
         background_transparent: bool = False,
         position: str | None = None,
         autorefresh: bool = False,
+        credit_alert: float | None = None,
     ) -> None:
         self._cookie_fn   = cookie if callable(cookie) else lambda: cookie
         self._cookie      = self._cookie_fn()
@@ -394,6 +409,7 @@ class OllamaWidget:
         self._opacity_requested = opacity  # None → resolve at window setup
         self._position    = position   # named anchor or None (restored)
         self._autorefresh = autorefresh  # True → "A" indicator, False → "M"
+        self._credit_alert = credit_alert  # cr: turns red below this balance
         self._transparent = background_transparent  # True → no background color
         self._data: dict | None  = None
         self._error: str | None  = None
@@ -695,14 +711,19 @@ class OllamaWidget:
         font = _compact_font()
         if font is None:
             # No Tk root available (headless tests): draw the line unfitted.
-            segments = _mini_segments(self._data, t)
+            segments = _mini_segments(
+                self._data, t, credit_alert=getattr(self, "_credit_alert", None)
+            )
             draw_font: tuple | tkfont.Font = (_FONT, 8)
         else:
             # The line starts at x=p, so reserve padding on both sides plus
             # the indicator width and a small gap before it.
             max_x = w - 2 * p - font.measure(indicator) - 6
             segments = _fit_compact_segments(
-                _mini_segments(self._data, t), t[_PLAN_COLOR], font.measure, max_x
+                _mini_segments(
+                    self._data, t, credit_alert=getattr(self, "_credit_alert", None)
+                ),
+                t[_PLAN_COLOR], font.measure, max_x
             )
             draw_font = font
         self._draw_segments(c, p, p, segments, draw_font)
@@ -883,6 +904,7 @@ def launch_widget(
     background_transparent: bool = False,
     position: str | None = None,
     autorefresh: bool    = False,
+    credit_alert: float | None = None,
 ) -> None:
     """
     Launch the always-on-top Ollama quota widget.
@@ -898,6 +920,8 @@ def launch_widget(
                     or None to restore last saved position.
         autorefresh: Whether to show the "A" (autorefresh) indicator; the
                     "M" (manual) indicator is shown when False.
+        credit_alert: Color the credit balance red when it drops below this
+                    amount (None disables the recolor).
     """
     check_dependencies()
     try:
@@ -931,6 +955,7 @@ def launch_widget(
                 opacity=opacity,
                 position=position,
                 autorefresh=autorefresh,
+                credit_alert=credit_alert,
             )
             return
 
@@ -942,5 +967,6 @@ def launch_widget(
         opacity=opacity,
         position=position,
         autorefresh=autorefresh,
+        credit_alert=credit_alert,
         background_transparent=background_transparent,
     ).run()

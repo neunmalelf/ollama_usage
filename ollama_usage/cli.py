@@ -258,12 +258,13 @@ def _dataonly_line(data: dict) -> str:
     """Return one machine-readable line for calling programs and agents:
 
     ``subscription;session_pct;seconds_to_session_reset;weekly_pct;``
-    ``seconds_to_weekly_reset;web_search;web_fetch``
+    ``seconds_to_weekly_reset;web_search;web_fetch;credit_balance``
     """
     session_pct = data["session"].get("used_pct", 0.0)
     weekly_pct = data["weekly"].get("used_pct", 0.0)
     ws = data.get("web_search_requests")
     wr = data.get("web_fetch_requests")
+    credit = data.get("credit_balance")
     return ";".join((
         str(plan_display_name(data["plan"])),
         f"{session_pct:.1f}",
@@ -272,6 +273,7 @@ def _dataonly_line(data: dict) -> str:
         str(max(0, int(_seconds_until(data["weekly"].get("resets_at", ""))))),
         str(ws if ws is not None else 0),
         str(wr if wr is not None else 0),
+        f"{credit:.2f}" if isinstance(credit, (int, float)) else "0.00",
     ))
 
 
@@ -602,11 +604,12 @@ def main():
         "agents, then exit (single fetch). Fields, semicolon-separated:\n"
         "  plan; percent_session; seconds_to_session_reset;\n"
         "  percent_weekly; seconds_to_weekly_reset;\n"
-        "  web_search; web_fetch\n"
-        "e.g.  PRO;48.4;11880;49.3;172800;34;0\n"
+        "  web_search; web_fetch; credit_balance\n"
+        "e.g.  PRO;48.4;11880;49.3;172800;34;0;12.40\n"
         "Percentages with one decimal (no %% sign). Seconds until the\n"
         "quota resets (0 when due). web_search/web_fetch: request counts\n"
-        "of the current session.",
+        "of the current session. credit_balance: usage credit with two\n"
+        "decimals (0.00 when the page has no credit section).",
     )
     parser.add_argument(
         "--minidisplay",
@@ -763,6 +766,14 @@ def main():
         help="Widget background fully transparent (native on Windows; on "
         "Linux/macOS requires PySide6, otherwise falls back to a translucent "
         "background)",
+    )
+    parser.add_argument(
+        "--credit-alert",
+        type=float,
+        default=1.0,
+        metavar="AMOUNT",
+        help="Color the widget credit balance (cr:) red when it drops below "
+        "AMOUNT (default: 1.0; use a negative value to disable)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logs")
     parser.add_argument(
@@ -940,6 +951,7 @@ def main():
                 position=args.position,
                 autorefresh=not args.autorefresh_off,
                 background_transparent=args.background_transparent,
+                credit_alert=None if args.credit_alert < 0 else args.credit_alert,
             )
             return
 

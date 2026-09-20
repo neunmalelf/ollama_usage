@@ -242,10 +242,10 @@ The `WebSearch:` line reports the number of web search requests during the curre
 colors, no countdown):
 
 ```
-PRO;48.4;11880;49.3;172800;34;0
+PRO;48.4;11880;49.3;172800;34;0;4.42
 ```
 
-Format: `<subscription>;<percent_used_session>;<seconds_until_session_reset>;<percent_used_weekly>;<seconds_until_weekly_reset>;<web_search_requests>;<web_fetch_requests>` — percentages with one decimal (no `%` sign), seconds until the quota resets (`0` when due), `ws`/`wr` are the web search / web fetch request counts of the current session. Intended for agents and wrappers that need the remaining token contingent and the reset times.
+Format: `<subscription>;<percent_used_session>;<seconds_until_session_reset>;<percent_used_weekly>;<seconds_until_weekly_reset>;<web_search_requests>;<web_fetch_requests>;<credit_balance>` — percentages with one decimal (no `%` sign), seconds until the quota resets (`0` when due), `ws`/`wr` are the web search / web fetch request counts of the current session, and `credit_balance` is the usage credit with two decimals (`0.00` when the page has no credit section). Intended for agents and wrappers that need the remaining token contingent and the reset times.
 
 ### JSON output (for scripts and agents)
 `--json` prints the usage as a single JSON object:
@@ -456,6 +456,7 @@ launch_gui(cookie=get_cookie_auto)
 | `--opacity` | `0.1` – `1.0` | `0.92` | Window opacity (`0.80` with `--background-transparent`) |
 | `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |
 | `--background-transparent` | – | off | Fully transparent background — the text/bars float over the wallpaper. Native on Windows; needs **PySide6** on Linux/macOS (otherwise falls back to a translucent window) |
+| `--credit-alert` | amount (`$`) | `1.0` | Color the credit balance (`cr:`) **red** in the widget when it drops below this amount; a negative value disables the recolor |
 
 ```bash
 # Default widget (dark, full, top-right)

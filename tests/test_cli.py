@@ -633,6 +633,38 @@ class TestGuiThemeWiring:
                 pass
         assert mock_launch.call_args.kwargs["theme"] == "dark"
 
+    def test_widget_passes_credit_alert_threshold(self) -> None:
+        with patch("ollama_usage.widget.launch_widget") as mock_launch, \
+             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x",
+                                "--credit-alert", "2.5"]):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        assert mock_launch.call_args.kwargs["credit_alert"] == 2.5
+
+    def test_widget_negative_credit_alert_disables_recolor(self) -> None:
+        with patch("ollama_usage.widget.launch_widget") as mock_launch, \
+             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x",
+                                "--credit-alert", "-1"]):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        assert mock_launch.call_args.kwargs["credit_alert"] is None
+
+    def test_widget_credit_alert_default_is_one(self) -> None:
+        with patch("ollama_usage.widget.launch_widget") as mock_launch, \
+             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x"]):
+            try:
+                from ollama_usage.cli import main
+                main()
+            except SystemExit:
+                pass
+        assert mock_launch.call_args.kwargs["credit_alert"] == 1.0
+
 
 class TestTransparentFallbackNotice:
     """``--widget --background-transparent`` must warn on non-Windows
@@ -909,12 +941,18 @@ class TestDataOnly:
         assert parts[4].isdigit()
         assert parts[5] == "35"
         assert parts[6] == "0"
-        assert len(parts) == 7
+        assert parts[7] == "0.00"
+        assert len(parts) == 8
 
     def test_absent_counts_are_zero_and_past_resets_zero_seconds(self) -> None:
         from ollama_usage.cli import _dataonly_line
         line = _dataonly_line(make_data(2.6, 1.9))
-        assert line.endswith(";2.6;0;1.9;0;0;0")
+        assert line.endswith(";2.6;0;1.9;0;0;0;0.00")
+
+    def test_credit_balance_field(self) -> None:
+        from ollama_usage.cli import _dataonly_line
+        line = _dataonly_line(make_data(2.6, 1.9, credit_balance=4.42))
+        assert line.endswith(";2.6;0;1.9;0;0;0;4.42")
 
     def test_prints_exactly_one_line(self, capsys) -> None:
         with patch("ollama_usage.cli.get_usage", return_value={
@@ -927,4 +965,4 @@ class TestDataOnly:
             from ollama_usage.cli import main
             main()
         out = capsys.readouterr().out
-        assert out == "PRO;48.4;0;49.3;0;0;0\n"
+        assert out == "PRO;48.4;0;49.3;0;0;0;0.00\n"
