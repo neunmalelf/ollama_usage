@@ -90,7 +90,7 @@ Print one machine-readable line for calling programs and agents, then exit
 (single fetch):
 .sp
 .nf
-PRO;48.4;11880;49.3;172800;34;0
+PRO;48.4;11880;49.3;172800;34;0;4.42
 .fi
 .sp
 Fields, separated by semicolons:
@@ -99,7 +99,8 @@ percent used this session,
 seconds until the session quota resets,
 percent used this week,
 seconds until the weekly quota resets,
-web search requests and web fetch requests of the current session.
+web search requests, web fetch requests and the usage credit balance
+(two decimals, 0.00 when absent) of the current session.
 Percentages have one decimal and no
 .IR % " sign; seconds are"
 0 when the quota is due.
@@ -250,6 +251,11 @@ Make the widget background fully transparent so only the text and bars are
 visible. Native on Windows; on Linux/macOS it requires PySide6 (install
 with pip install ollama\-usage[widget]) and otherwise falls back to a
 translucent window with a warning.
+.TP
+.BI \-\-credit\-alert " " AMOUNT
+Color the credit balance (cr:) red in the widget when it drops below
+.I AMOUNT
+(default: 1.0; a negative value disables the recolor).
 .TP
 .B \-\-debug
 Enable debug logging.

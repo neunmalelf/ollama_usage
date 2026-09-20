@@ -89,6 +89,7 @@ class TransparentWidget(QWidget):
         opacity: float | None,
         position: str | None,
         autorefresh: bool,
+        credit_alert: float | None = None,
     ) -> None:
         # X11BypassWindowManagerHint = override-redirect, exactly like the Tk
         # widget: KWin then honors the restored position instead of applying
@@ -118,6 +119,7 @@ class TransparentWidget(QWidget):
         self._size = self._resolve_size(size)  # "compact" | "full"
         self._position = position
         self._autorefresh = autorefresh
+        self._credit_alert = credit_alert  # cr: turns red below this balance
         self._data: dict | None = None
         self._error: str | None = None
         self._is_fetching = threading.Event()
@@ -299,7 +301,9 @@ class TransparentWidget(QWidget):
         # The line starts at x=p; reserve padding plus the indicator + a gap.
         max_x = w - 2 * p - metrics.horizontalAdvance(indicator) - 6
         segments = _fit_compact_segments(
-            _mini_segments(self._data, t), t[_PLAN_COLOR],
+            _mini_segments(
+                self._data, t, credit_alert=getattr(self, "_credit_alert", None)
+            ), t[_PLAN_COLOR],
             metrics.horizontalAdvance, max_x,
         )
         self._draw_segments(painter, p, p, segments, font)
@@ -482,6 +486,7 @@ def launch_widget_qt(
     opacity: float | None = None,
     position: str | None = None,
     autorefresh: bool = False,
+    credit_alert: float | None = None,
 ) -> None:
     """Launch the per-pixel transparent (PySide6) Ollama quota widget."""
     # The Tk widget is X11-only anyway, so run under XWayland too: absolute
@@ -504,6 +509,7 @@ def launch_widget_qt(
         opacity=opacity,
         position=position,
         autorefresh=autorefresh,
+        credit_alert=credit_alert,
     )
     # Keep a reference for the lifetime of the event loop (parentless widget).
     app._ollama_widget = widget

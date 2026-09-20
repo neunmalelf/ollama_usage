@@ -168,6 +168,37 @@ class TestMiniSegments:
         balance = next(t for t, c in segs if c == w.THEMES["minimal"][w._VALUE_COLOR])
         assert balance == "4.51"
 
+    def test_credit_balance_red_below_threshold(self) -> None:
+        segs = w._mini_segments(
+            _make_data(credit_balance=0.50), w.THEMES["minimal"], credit_alert=1.0
+        )
+        balance = next(t for t, c in segs if c == w.THEMES["minimal"]["red"])
+        assert balance == "0.50"
+
+    def test_credit_balance_value_color_at_threshold(self) -> None:
+        # Exactly at the threshold is not "below" it — stays the value color.
+        segs = w._mini_segments(
+            _make_data(credit_balance=1.00), w.THEMES["minimal"], credit_alert=1.0
+        )
+        assert not any(c == w.THEMES["minimal"]["red"] for _, c in segs)
+
+    def test_credit_balance_value_color_above_threshold(self) -> None:
+        segs = w._mini_segments(
+            _make_data(credit_balance=4.51), w.THEMES["minimal"], credit_alert=1.0
+        )
+        assert not any(c == w.THEMES["minimal"]["red"] for _, c in segs)
+
+    def test_credit_alert_absent_keeps_value_color(self) -> None:
+        segs = w._mini_segments(_make_data(credit_balance=0.10), w.THEMES["minimal"])
+        assert not any(c == w.THEMES["minimal"]["red"] for _, c in segs)
+
+    def test_credit_alert_ignores_absent_balance(self) -> None:
+        # No credit section on the page (None) must not be colored red.
+        segs = w._mini_segments(
+            _make_data(credit_balance=None), w.THEMES["minimal"], credit_alert=1.0
+        )
+        assert not any(c == w.THEMES["minimal"]["red"] for _, c in segs)
+
     def test_countdown_compact_format(self) -> None:
         segs = w._mini_countdown_segments(90061, w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
@@ -458,6 +489,25 @@ class TestCompactFitDraw:
     def test_indicator_drawn_after_line(self) -> None:
         texts = self._draw("pro")
         assert texts[-1] == "A"
+
+    def test_compact_draw_recolors_credit_below_threshold(self) -> None:
+        inst = w.OllamaWidget.__new__(w.OllamaWidget)
+        inst._canvas = MagicMock()
+        inst._canvas.bbox.return_value = (0, 0, 10, 10)
+        inst._theme = w.THEMES["minimal"]
+        inst._size = "compact"
+        inst._data = _make_data(credit_balance=0.50)
+        inst._error = None
+        inst._autorefresh = False
+        inst._credit_alert = 1.0
+        with patch("ollama_usage.widget.tkfont.Font", return_value=self._FakeFont()):
+            inst._draw_compact()
+        fills = [
+            k.get("fill")
+            for a, k in inst._canvas.create_text.call_args_list
+            if k.get("text") == "0.50"
+        ]
+        assert fills and fills[0] == w.THEMES["minimal"]["red"]
 
 
 # ---------------------------------------------------------------------------

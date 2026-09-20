@@ -32,7 +32,7 @@
 
 `ollama-usage --minidisplay --autorefresh {{60}}`
 
-- Print one machine-readable line for scripts and agents (subscription, percentages, seconds until reset, ws, wr):
+- Print one machine-readable line for scripts and agents (subscription, percentages, seconds until reset, ws, wr, credit balance):
 
 `ollama-usage --dataonly`
 
