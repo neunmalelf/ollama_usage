@@ -600,7 +600,7 @@ def main():
     )
     parser.add_argument(
         "--dataonly", action="store_true",
-        help="Print one machine-readable line for calling programs and "
+        help="Print one machine-readable line for calling programs and \n"
         "agents, then exit (single fetch). Fields, semicolon-separated:\n"
         "  plan; percent_session; seconds_to_session_reset;\n"
         "  percent_weekly; seconds_to_weekly_reset;\n"
