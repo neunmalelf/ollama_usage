@@ -14,7 +14,7 @@
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20260906050000Z"
+__VERSION__="1.0.20260922052442Z"
 
 set -e
 
@@ -82,10 +82,13 @@ CONFIGURATION_FINAL_BINARY_DESTINATION_MACOS="$HOME/sbin"            # macOS dep
 CONFIGURATION_FINAL_BINARY_DESTINATION_WINDOWS="/b/winsbin"          # Windows (MSYS2/MINGW/CYGWIN) deploy target
 
 # --- docs installed alongside the binary --------------------------------------
-CONFIGURATION_MAN_PAGE="man/ollama-usage.1"
+CONFIGURATION_MAN_PAGE="man/ollama_usage.1"
 CONFIGURATION_MAN_DEST="$HOME/.local/share/man/man1"      # user-local, picked up by mandb
-CONFIGURATION_TLDR_PAGE="tldr/pages/common/ollama-usage.md"
-CONFIGURATION_TLDR_DEST="$HOME/.cache/tldr/pages/common"  # default cache dir of tldr clients
+CONFIGURATION_TLDR_PAGE="tldr/ollama-usage.md"            # source page in this repo
+CONFIGURATION_TLDR_DEST="$HOME/.local/share/tealdeer/pages/"  # tealdeer custom pages dir
+CONFIGURATION_TLDR_NAME="ollama-usage.page.md"            # tealdeer serves ONLY '<name>.page.md'
+                                                          # from the custom pages dir - a plain
+                                                          # '<name>.md' there is never rendered
 # =============================================================================
 
 # --- platform-specific output name / icon -------------------------------------
@@ -160,9 +163,12 @@ install_docs() {
     esac
 
     if [ -f "$tldr_src" ]; then
-        echo "[_build] installing tldr page $tldr_src -> $tldr_dest/"
+        echo "[_build] installing tldr page $tldr_src -> ${tldr_dest}${CONFIGURATION_TLDR_NAME}"
         mkdir -p "$tldr_dest" || { echo "[_build] ERROR: cannot create $tldr_dest" >&2; return 1; }
-        cp -f "$tldr_src" "$tldr_dest/" || { echo "[_build] ERROR: cannot install tldr page" >&2; return 1; }
+        # Install under the '.page.md' name: tealdeer renders nothing for a
+        # bare '<name>.md' in its custom pages dir.
+        cp -f "$tldr_src" "${tldr_dest}${CONFIGURATION_TLDR_NAME}" \
+            || { echo "[_build] ERROR: cannot install tldr page" >&2; return 1; }
     else
         echo "[_build] WARNING: $tldr_src not found - skipping tldr page" >&2
     fi
