@@ -67,7 +67,7 @@ pip install git+https://github.com/neunmalelf/ollama_usage
 
 ### With desktop notifications support
 ```bash
-pip install "ollama-usage[notify] @ git+https://github.com/neunmalelf/ollama_usage"
+pip install "ollama_usage[notify] @ git+https://github.com/neunmalelf/ollama_usage"
 ```
 ---
 
@@ -113,91 +113,91 @@ mypy ollama_usage/
 ## CLI Usage
 ```bash
 # Auto-detect browser and display usage
-ollama-usage
+ollama_usage
 
 # Output as JSON
-ollama-usage --json
+ollama_usage --json
 
 # One machine-readable line for scripts and agents
-ollama-usage --dataonly
+ollama_usage --dataonly
 
 # Force a specific browser
-ollama-usage --browser firefox
-ollama-usage --browser chrome
+ollama_usage --browser firefox
+ollama_usage --browser chrome
 
 # Pass cookie manually
-ollama-usage --cookie YOUR_SESSION_COOKIE
+ollama_usage --cookie YOUR_SESSION_COOKIE
 
 # Pass cookie via environment variable
 export OLLAMA_BROWSER_COOKIE=YOUR_SESSION_COOKIE
-ollama-usage
+ollama_usage
 
 # One-line usage
-OLLAMA_BROWSER_COOKIE=YOUR_SESSION_COOKIE ollama-usage --json
+OLLAMA_BROWSER_COOKIE=YOUR_SESSION_COOKIE ollama_usage --json
 
 # Store the cookie once — after this the program runs without any browser
 # installed. While a browser is used, the stored copy stays fresh
 # automatically; re-run --save-cookie only if NO browser is available and
 # the cookie expires (the program tells you when that happens).
-ollama-usage --save-cookie YOUR_SESSION_COOKIE
-ollama-usage
+ollama_usage --save-cookie YOUR_SESSION_COOKIE
+ollama_usage
 
 # Remove the stored cookie again
-ollama-usage --forget-cookie
+ollama_usage --forget-cookie
 
 # Autorefresh is ON by default (120s, shows next-refresh timestamp footer)
-ollama-usage
+ollama_usage
 # Custom refresh interval
-ollama-usage --autorefresh 60
-ollama-usage --autorefresh 1200
+ollama_usage --autorefresh 60
+ollama_usage --autorefresh 1200
 # Disable autorefresh (single fetch)
-ollama-usage --autorefresh-off
+ollama_usage --autorefresh-off
 
 # Single-line compact output
-ollama-usage --minidisplay
+ollama_usage --minidisplay
 
 # Compact output with autorefresh (appends a cyan countdown)
-ollama-usage --minidisplay
-ollama-usage --minidisplay --autorefresh 60
+ollama_usage --minidisplay
+ollama_usage --minidisplay --autorefresh 60
 
 # Alert mode — exit code 1 if usage exceeds 80%
-ollama-usage --alert 80
+ollama_usage --alert 80
 
 # Quiet mode — no output, only exit code (useful in scripts/cron)
-ollama-usage --quiet --alert 80
+ollama_usage --quiet --alert 80
 
 # One-shot — notify if usage exceeds 80% (default threshold)
-ollama-usage --notify
+ollama_usage --notify
 
 # One-shot — notify if usage exceeds 75%
-ollama-usage --notify --notify-threshold 75
+ollama_usage --notify --notify-threshold 75
 
 # Notify when threshold is crossed, no spam between ticks (autorefresh on by default)
-ollama-usage --notify
+ollama_usage --notify
 
 # Custom threshold and refresh interval
-ollama-usage --notify --autorefresh 60 --notify-threshold 75
+ollama_usage --notify --autorefresh 60 --notify-threshold 75
 
 # Debug mode
-ollama-usage --debug
-ollama-usage --debug --browser firefox
+ollama_usage --debug
+ollama_usage --debug --browser firefox
 
 # GUI window (OK + Refresh buttons)
-ollama-usage --gui
+ollama_usage --gui
 
 # Desktop widget (always-on-top, auto-refreshing)
-ollama-usage --widget
-ollama-usage --widget --theme light
-ollama-usage --widget --size compact
-ollama-usage --widget --opacity 0.8
-ollama-usage --widget --position bottom-right
-ollama-usage --widget --theme minimal --size compact --position top-right
+ollama_usage --widget
+ollama_usage --widget --theme light
+ollama_usage --widget --size compact
+ollama_usage --widget --opacity 0.8
+ollama_usage --widget --position bottom-right
+ollama_usage --widget --theme minimal --size compact --position top-right
 
 # Version
-ollama-usage --version
+ollama_usage --version
 
 # Help
-ollama-usage --help
+ollama_usage --help
 ```
 
 ### Example output
@@ -309,10 +309,10 @@ Combine with `--quiet` to suppress all output and use only the exit code.
 
 ```bash
 # Cron: send a notification if weekly usage exceeds 90%
-ollama-usage --quiet --alert 90 || notify-send "Ollama quota warning"
+ollama_usage --quiet --alert 90 || notify-send "Ollama quota warning"
 
 # Bash script
-if ! ollama-usage --quiet --alert 75; then
+if ! ollama_usage --quiet --alert 75; then
   echo "Quota running low!"
 fi
 ```
@@ -322,7 +322,7 @@ fi
 ## Desktop notifications
 
 `--notify` sends a native desktop notification when session, weekly **or** web search usage crosses a threshold.  
-Requires the `notify` extra: `pip install "ollama-usage[notify] @ git+https://github.com/neunmalelf/ollama_usage"`
+Requires the `notify` extra: `pip install "ollama_usage[notify] @ git+https://github.com/neunmalelf/ollama_usage"`
 
 Two levels are fired automatically:
 - ⚠️ **Warning** — at the configured threshold (default: 80%)
@@ -332,14 +332,14 @@ Each level notifies **once per threshold crossing** — no spam during autorefre
 If usage drops back below the threshold, the notification will fire again if it rises once more.
 ```bash
 # One-shot — notify if usage exceeds 80%
-ollama-usage --notify
+ollama_usage --notify
 
 # Custom threshold
-ollama-usage --notify --notify-threshold 75
+ollama_usage --notify --notify-threshold 75
 
 # Continuous monitoring with notifications (autorefresh on by default)
-ollama-usage --notify 
-ollama-usage --notify --autorefresh 60 --notify-threshold 75
+ollama_usage --notify 
+ollama_usage --notify --autorefresh 60 --notify-threshold 75
 ```
 
 ---
@@ -353,11 +353,11 @@ baseline, so a reset that happened before the program started is not announced.
 
 ```bash
 # Default texts
-ollama-usage --autorefresh 60 --voice-info-when-session-usage-was-reset \
+ollama_usage --autorefresh 60 --voice-info-when-session-usage-was-reset \
              --voice-info-when-weekly-usage-was-reset
 
 # Custom texts
-ollama-usage --autorefresh 60 \
+ollama_usage --autorefresh 60 \
              --voice-info-when-session-usage-was-reset "session quota refreshed" \
              --voice-info-when-weekly-usage-was-reset "weekly quota refreshed"
 ```
@@ -403,7 +403,7 @@ machine.
 
 `--gui` opens a simple, cross-platform window (Windows, Linux, macOS) that shows the same quota information as the CLI. It uses **tkinter** (Python stdlib), so no extra dependency is required.
 
-- The window title shows the app name and version: `ollama-usage (<version>)`.
+- The window title shows the app name and version: `ollama_usage (<version>)`.
 - An **OK** button closes the app.
 - A **Refresh** button re-fetches the data and redraws the window.
 - A **darkmode** checkbox toggles dark mode (Alt+d).
@@ -412,10 +412,10 @@ machine.
 
 ```bash
 # Open the GUI window
-ollama-usage --gui
+ollama_usage --gui
 
 # With a manual cookie
-ollama-usage --gui --cookie YOUR_SESSION_COOKIE
+ollama_usage --gui --cookie YOUR_SESSION_COOKIE
 ```
 
 > On minimal Linux installs, tkinter may need to be installed separately:
@@ -438,7 +438,7 @@ launch_gui(cookie=get_cookie_auto)
 > `--background-transparent` renders a **per-pixel transparent** widget (only the
 > text and bars float over the wallpaper). This is impossible with Tk outside
 > Windows, so on Linux/macOS it needs **PySide6** — install it with
-> `pip install ollama-usage[widget]` (or `pip install PySide6`). Without PySide6
+> `pip install ollama_usage[widget]` (or `pip install PySide6`). Without PySide6
 > the widget falls back to a translucent Tk window and prints a warning.
 
 - **Frameless** and draggable — click and drag anywhere to move it.
@@ -461,16 +461,16 @@ launch_gui(cookie=get_cookie_auto)
 
 ```bash
 # Default widget (dark, full, top-right)
-ollama-usage --widget
+ollama_usage --widget
 
 # Light theme, compact, bottom-right
-ollama-usage --widget --theme light --size compact --position bottom-right
+ollama_usage --widget --theme light --size compact --position bottom-right
 
 # Semi-transparent minimal widget
-ollama-usage --widget --theme minimal --opacity 0.8
+ollama_usage --widget --theme minimal --opacity 0.8
 
 # Fully transparent background (PySide6 on Linux/macOS; native on Windows)
-ollama-usage --widget --background-transparent
+ollama_usage --widget --background-transparent
 ```
 
 ### Python usage
@@ -625,7 +625,7 @@ Allow access to continue.
 
 ## Building a standalone executable
 
-You can compile `ollama-usage` into a single standalone binary (`.exe` on Windows) with **Nuitka** (native-compiled, faster-starting, harder-to-decompile than PyInstaller).
+You can compile `ollama_usage` into a single standalone binary (`.exe` on Windows) with **Nuitka** (native-compiled, faster-starting, harder-to-decompile than PyInstaller).
 
 ```bash
 # From the project root
@@ -633,7 +633,7 @@ You can compile `ollama-usage` into a single standalone binary (`.exe` on Window
 ```
 
 The script:
-- Compiles to a single-file `dist/ollama-usage.exe` (Windows) or `dist/ollama-usage` (Linux/macOS) in onefile mode.
+- Compiles to a single-file `dist/ollama_usage.exe` (Windows) or `dist/ollama_usage` (Linux/macOS) in onefile mode.
 - Embeds `icon.ico` as the executable icon **and** bundles it so the GUI window and widget show it at runtime.
 - Includes the tkinter GUI toolkit (`--enable-plugin=tk-inter`).
 - Copies the finished binary to `~/sbin` (Linux/macOS) or `/b/winsbin` (Windows) — no sudo needed.
@@ -651,7 +651,7 @@ Options:
 ```
 
 Requirements:
-- Python with `nuitka` installed: `pip install "ollama-usage[dev]"` (or `pip install nuitka`)
+- Python with `nuitka` installed: `pip install "ollama_usage[dev]"` (or `pip install nuitka`)
 - On Python 3.13+, Nuitka needs the **Zig** compiler (installed via scoop or downloaded automatically on first build — the script handles this with `--zig`).
 
 > The build takes a few minutes on first run (it compiles all modules to C).

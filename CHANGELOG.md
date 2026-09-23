@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Naming: the program is spelled `ollama_usage` everywhere now (was
+  `ollama-usage`) — `--version` prints `ollama_usage <version>`, the pip
+  distribution name and console script are `ollama_usage` (PyPI treats `_`
+  and `-` as equivalent, so existing installs keep resolving), `--help`
+  always shows `ollama_usage` as the program name, and the man page (`.TH
+  OLLAMA_USAGE`), tldr page (`tldr/ollama_usage.md`, installed as
+  `ollama_usage.page.md`) and `_build` product metadata follow. The legacy
+  dotted settings files (`~/.ollama-usage-gui.cfg`,
+  `~/.ollama-usage-widget.cfg`) keep their names — they are the migration
+  source for older releases.
+
 ## [3.0.20260923113912] - 2026-09-23
 
 ### Added
@@ -87,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   widget (only text and bars visible over the wallpaper) via a new PySide6
   backend (`ollama_usage/widget_qt.py`) on Linux/macOS — plain Tk cannot do
   per-pixel transparency outside Windows. Install with
-  `pip install ollama-usage[widget]`. Without PySide6 the widget falls back
+  `pip install ollama_usage[widget]`. Without PySide6 the widget falls back
   to the translucent Tk window and prints a warning (also in `--daemon`
   mode, via the parent process, since the child's stderr is /dev/null).
   `_build` bundles PySide6 automatically when it is importable in the build

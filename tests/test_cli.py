@@ -243,7 +243,7 @@ class TestAutorefreshInterval:
              patch("ollama_usage.cli.get_usage", return_value=fake_data), \
              patch("ollama_usage.cli._autorefresh_sleep", side_effect=fake_sleep), \
              patch("ollama_usage.cli.sys.stdout.write"), \
-             patch("sys.argv", ["ollama-usage", "--autorefresh", str(interval_arg), "--quiet"]):
+             patch("sys.argv", ["ollama_usage", "--autorefresh", str(interval_arg), "--quiet"]):
             try:
                 from ollama_usage.cli import main
                 main()
@@ -611,21 +611,21 @@ class TestGuiThemeWiring:
 
     def test_theme_dark_forces_gui_darkmode(self) -> None:
         captured = self._run_gui(
-            ["ollama-usage", "--gui", "--theme", "dark", "--cookie", "x"])
+            ["ollama_usage", "--gui", "--theme", "dark", "--cookie", "x"])
         assert captured["dark"] is True
 
     def test_theme_light_forces_gui_light(self) -> None:
         captured = self._run_gui(
-            ["ollama-usage", "--gui", "--theme", "light", "--cookie", "x"])
+            ["ollama_usage", "--gui", "--theme", "light", "--cookie", "x"])
         assert captured["dark"] is False
 
     def test_no_theme_restores_saved_darkmode(self) -> None:
-        captured = self._run_gui(["ollama-usage", "--gui", "--cookie", "x"])
+        captured = self._run_gui(["ollama_usage", "--gui", "--cookie", "x"])
         assert captured["dark"] is None
 
     def test_widget_defaults_to_dark_without_theme(self) -> None:
         with patch("ollama_usage.widget.launch_widget") as mock_launch, \
-             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x"]):
+             patch("sys.argv", ["ollama_usage", "--widget", "--cookie", "x"]):
             try:
                 from ollama_usage.cli import main
                 main()
@@ -635,7 +635,7 @@ class TestGuiThemeWiring:
 
     def test_widget_passes_credit_alert_threshold(self) -> None:
         with patch("ollama_usage.widget.launch_widget") as mock_launch, \
-             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x",
+             patch("sys.argv", ["ollama_usage", "--widget", "--cookie", "x",
                                 "--credit-alert", "2.5"]):
             try:
                 from ollama_usage.cli import main
@@ -646,7 +646,7 @@ class TestGuiThemeWiring:
 
     def test_widget_negative_credit_alert_disables_recolor(self) -> None:
         with patch("ollama_usage.widget.launch_widget") as mock_launch, \
-             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x",
+             patch("sys.argv", ["ollama_usage", "--widget", "--cookie", "x",
                                 "--credit-alert", "-1"]):
             try:
                 from ollama_usage.cli import main
@@ -657,7 +657,7 @@ class TestGuiThemeWiring:
 
     def test_widget_credit_alert_default_is_one(self) -> None:
         with patch("ollama_usage.widget.launch_widget") as mock_launch, \
-             patch("sys.argv", ["ollama-usage", "--widget", "--cookie", "x"]):
+             patch("sys.argv", ["ollama_usage", "--widget", "--cookie", "x"]):
             try:
                 from ollama_usage.cli import main
                 main()
@@ -692,7 +692,7 @@ class TestTransparentFallbackNotice:
             return  # notice is Windows-exclusive; nothing to assert here
         with patch("ollama_usage.widget.qt_transparency_supported",
                    return_value=False):
-            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+            self._run_widget(["ollama_usage", "--widget", "--background-transparent",
                               "--cookie", "x"])
         err = capsys.readouterr().err
         assert "needs PySide6" in err
@@ -709,7 +709,7 @@ class TestTransparentFallbackNotice:
              patch("ollama_usage.widget.pyside6_import_error",
                    return_value="QtCore.so: undefined symbol: xyz"), \
              patch("importlib.util.find_spec", return_value=MagicMock()):
-            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+            self._run_widget(["ollama_usage", "--widget", "--background-transparent",
                               "--cookie", "x"])
         err = capsys.readouterr().err
         assert "needs PySide6" in err
@@ -722,7 +722,7 @@ class TestTransparentFallbackNotice:
         with patch("ollama_usage.widget.qt_transparency_supported",
                    return_value=False), \
              patch("importlib.util.find_spec", return_value=None):
-            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+            self._run_widget(["ollama_usage", "--widget", "--background-transparent",
                               "--cookie", "x"])
         err = capsys.readouterr().err
         assert "was not found" in err
@@ -733,17 +733,17 @@ class TestTransparentFallbackNotice:
             return
         with patch("ollama_usage.widget.qt_transparency_supported",
                    return_value=True):
-            self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+            self._run_widget(["ollama_usage", "--widget", "--background-transparent",
                               "--cookie", "x"])
         assert "needs PySide6" not in capsys.readouterr().err
 
     def test_no_notice_without_transparent_flag(self, capsys) -> None:
-        self._run_widget(["ollama-usage", "--widget", "--cookie", "x"])
+        self._run_widget(["ollama_usage", "--widget", "--cookie", "x"])
         assert "needs PySide6" not in capsys.readouterr().err
 
     def test_no_notice_on_windows(self, capsys, monkeypatch) -> None:
         monkeypatch.setattr(sys, "platform", "win32")
-        self._run_widget(["ollama-usage", "--widget", "--background-transparent",
+        self._run_widget(["ollama_usage", "--widget", "--background-transparent",
                           "--cookie", "x"])
         assert capsys.readouterr().err == ""
 
@@ -751,7 +751,7 @@ class TestTransparentFallbackNotice:
         if sys.platform == "win32":
             return
         captured = self._run_widget(
-            ["ollama-usage", "--widget", "--background-transparent",
+            ["ollama_usage", "--widget", "--background-transparent",
              "--theme", "minimal", "--cookie", "x"])
         capsys.readouterr()
         assert captured["opacity"] is None  # default resolved inside the widget
@@ -760,7 +760,7 @@ class TestTransparentFallbackNotice:
 
     def test_explicit_opacity_forwarded(self) -> None:
         captured = self._run_widget(
-            ["ollama-usage", "--widget", "--opacity", "0.5", "--cookie", "x"])
+            ["ollama_usage", "--widget", "--opacity", "0.5", "--cookie", "x"])
         assert captured["opacity"] == 0.5
 
 
@@ -829,7 +829,7 @@ class TestVoiceArgs:
             raise SystemExit(0)
 
         with patch.object(argparse.ArgumentParser, "parse_args", fake_parse), \
-             patch.object(sys, "argv", ["ollama-usage"] + argv):
+             patch.object(sys, "argv", ["ollama_usage"] + argv):
             try:
                 from ollama_usage.cli import main
                 main()
@@ -864,13 +864,13 @@ class TestCookieStorage:
         from ollama_usage import config
         monkeypatch.setattr(config, "COOKIE_FILE", tmp_path / "cookie")
         with patch("sys.argv",
-                   ["ollama-usage", "--save-cookie", "  dummy-cookie  "]):
+                   ["ollama_usage", "--save-cookie", "  dummy-cookie  "]):
             from ollama_usage.cli import main
             main()
         out = capsys.readouterr().out
         assert "Saved session cookie" in out
         assert config.load_saved_cookie() == "dummy-cookie"
-        with patch("sys.argv", ["ollama-usage", "--forget-cookie"]):
+        with patch("sys.argv", ["ollama_usage", "--forget-cookie"]):
             from ollama_usage.cli import main
             main()
         assert config.load_saved_cookie() is None
@@ -888,7 +888,7 @@ class TestCookieStorage:
                  "weekly": {"used_pct": 1.0,
                  "resets_at": "2026-04-06T00:00:00Z"},
              }), \
-             patch("sys.argv", ["ollama-usage", "--autorefresh-off", "--json"]):
+             patch("sys.argv", ["ollama_usage", "--autorefresh-off", "--json"]):
             from ollama_usage.cli import main
             main()
         out = capsys.readouterr().out
@@ -904,7 +904,7 @@ class TestCookieStorage:
                  "weekly": {"used_pct": 1.0,
                  "resets_at": "2026-04-06T00:00:00Z"},
              }), \
-             patch("sys.argv", ["ollama-usage", "--autorefresh-off",
+             patch("sys.argv", ["ollama_usage", "--autorefresh-off",
                                 "--browser", "firefox", "--json"]):
             from ollama_usage.cli import main
             main()
@@ -920,7 +920,7 @@ class TestCookieStorage:
                  "weekly": {"used_pct": 1.0,
                  "resets_at": "2026-04-06T00:00:00Z"},
              }), \
-             patch("sys.argv", ["ollama-usage", "--autorefresh-off", "--quiet",
+             patch("sys.argv", ["ollama_usage", "--autorefresh-off", "--quiet",
                                 "--cookie", "manual-value"]):
             from ollama_usage.cli import main
             main()
@@ -961,7 +961,7 @@ class TestDataOnly:
                  "weekly": {"used_pct": 49.3,
                  "resets_at": "2026-04-06T00:00:00Z"},
              }), \
-             patch("sys.argv", ["ollama-usage", "--dataonly"]):
+             patch("sys.argv", ["ollama_usage", "--dataonly"]):
             from ollama_usage.cli import main
             main()
         out = capsys.readouterr().out

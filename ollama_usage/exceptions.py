@@ -1,8 +1,8 @@
-"""Custom exceptions for ollama-usage."""
+"""Custom exceptions for ollama_usage."""
 
 
 class OllamaUsageError(Exception):
-    """Base exception for ollama-usage."""
+    """Base exception for ollama_usage."""
 
 
 class AuthError(OllamaUsageError):
