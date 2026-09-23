@@ -92,7 +92,7 @@ class TestRestorePosition:
         assert w._load_state() == {"x": 77, "y": 88, "size": "compact"}
 
 # ---------------------------------------------------------------------------
-# _mini_segments / _mini_countdown_segments — compact minidisplay layout
+# _mini_segments / _mini_countdown_segments — compact widget line layout
 # ---------------------------------------------------------------------------
 
 def _make_data(**overrides) -> dict:
@@ -110,11 +110,12 @@ def _make_data(**overrides) -> dict:
 
 class TestMiniSegments:
 
-    def test_layout_matches_minidisplay(self) -> None:
+    def test_layout_is_the_compact_widget_line(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
         assert text == (
-            "olu (PRO) s: 2.6 % (00:00) | w: 1.9 % (00:00) cr: 0.00 ws: 2 wr: 0"
+            "olu (PRO) s: 2.6 % (00:00) | w: 1.9 % (00:00) "
+            "ws: 2 wr: 0 | c: $ 0.00"
         )
 
     def test_plan_is_orange(self) -> None:
@@ -140,33 +141,37 @@ class TestMiniSegments:
     def test_web_search_absent_shows_zero(self) -> None:
         segs = w._mini_segments(_make_data(web_search_requests=None), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text.endswith(" ws: 0 wr: 0")
+        assert text.endswith(" ws: 0 wr: 0 | c: $ 0.00")
 
     def test_web_fetch_shown_when_present(self) -> None:
         segs = w._mini_segments(_make_data(web_fetch_requests=5), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert text.endswith(" wr: 5")
+        assert text.endswith(" wr: 5 | c: $ 0.00")
 
-    def test_credit_balance_shown_before_web_search(self) -> None:
+    def test_credit_balance_shown_after_web_fetch_count(self) -> None:
         segs = w._mini_segments(_make_data(credit_balance=4.51), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert " cr: 4.51 ws: 2 wr: 0" in text
-        assert text.index("cr: 4.51") < text.index("ws:")
+        assert text.endswith(" ws: 2 wr: 0 | c: $ 4.51")
+        assert text.index("wr: 0") < text.index("c: $ 4.51")
 
     def test_credit_balance_formatted_with_two_decimals(self) -> None:
         segs = w._mini_segments(_make_data(credit_balance=12), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert " cr: 12.00 " in text
+        assert text.endswith(" | c: $ 12.00")
 
     def test_credit_balance_absent_shows_zero(self) -> None:
         segs = w._mini_segments(_make_data(), w.THEMES["minimal"])
         text = "".join(t for t, _ in segs)
-        assert " cr: 0.00 " in text
+        assert text.endswith(" | c: $ 0.00")
 
     def test_credit_balance_uses_value_color(self) -> None:
         segs = w._mini_segments(_make_data(credit_balance=4.51), w.THEMES["minimal"])
-        balance = next(t for t, c in segs if c == w.THEMES["minimal"][w._VALUE_COLOR])
-        assert balance == "4.51"
+        value_color = w.THEMES["minimal"][w._VALUE_COLOR]
+        assert "4.51" in [t for t, c in segs if c == value_color]
+        # The "$" stays label-colored, the amount is the value segment.
+        assert segs[segs.index((" | c: $ ", w.THEMES["minimal"]["sub"])) + 1] == (
+            "4.51", value_color,
+        )
 
     def test_credit_balance_red_below_threshold(self) -> None:
         segs = w._mini_segments(

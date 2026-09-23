@@ -734,7 +734,8 @@ def main():
     parser.add_argument(
         "--widget",
         action="store_true",
-        help="Launch desktop widget (A by default, M with --autorefresh-off; green=fresh, red=error)",
+        help="Launch desktop widget (A (autorefresh by default), "
+        "M (manual refresh with --autorefresh-off); green=fresh, red=error)",
     )
     parser.add_argument(
         "--gui", action="store_true", help="Launch a simple GUI window with OK and Refresh buttons"
@@ -772,7 +773,8 @@ def main():
         type=float,
         default=1.0,
         metavar="AMOUNT",
-        help="Color the widget credit balance (cr:) red when it drops below "
+        help="Color the widget credit balance (the c: $ value at the end of "
+        "the compact line) red when it drops below "
         "AMOUNT (default: 1.0; use a negative value to disable)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logs")

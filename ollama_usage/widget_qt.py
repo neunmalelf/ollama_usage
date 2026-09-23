@@ -121,7 +121,7 @@ class TransparentWidget(QWidget):
         self._size = self._resolve_size(size)  # "compact" | "full"
         self._position = position
         self._autorefresh = autorefresh
-        self._credit_alert = credit_alert  # cr: turns red below this balance
+        self._credit_alert = credit_alert  # c: $ turns red below this balance
         self._data: dict | None = None
         self._error: str | None = None
         self._is_fetching = threading.Event()

@@ -220,10 +220,11 @@ def _credit_value(data: dict) -> str:
 def _mini_segments(
     data: dict, theme: dict, credit_alert: float | None = None,
 ) -> list[tuple[str, str]]:
-    """Return the minidisplay line as colored segments (no bars).
+    """Return the compact widget line as colored segments (no bars).
 
-    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) cr: <balance> ws: <count> wr: <count>``
+    ``olu (plan) s: <pct> (<left>) | w: <pct> (<left>) ws: <count> wr: <count> | c: $ <balance>``
 
+    The credit balance follows the web fetch count as ``| c: $ <balance>``.
     When ``credit_alert`` is set and the balance drops below it, the balance
     value is drawn in the theme's red instead of the value color.
     """
@@ -263,12 +264,12 @@ def _mini_segments(
         _seconds_until(weekly.get("resets_at", "")), theme
     ))
     segs.append((")", theme["sub"]))
-    segs.append((" cr: ", theme["sub"]))
-    segs.append((cr, theme[cr_color]))
     segs.append((" ws: ", theme["sub"]))
     segs.append((ws, theme[_VALUE_COLOR]))
     segs.append((" wr: ", theme["sub"]))
     segs.append((wr, theme[_VALUE_COLOR]))
+    segs.append((" | c: $ ", theme["sub"]))
+    segs.append((cr, theme[cr_color]))
     return segs
 
 def _compact_font() -> tkfont.Font | None:
@@ -442,7 +443,7 @@ class OllamaWidget:
         self._opacity_requested = opacity  # None → resolve at window setup
         self._position    = position   # named anchor or None (restored)
         self._autorefresh = autorefresh  # True → "A" indicator, False → "M"
-        self._credit_alert = credit_alert  # cr: turns red below this balance
+        self._credit_alert = credit_alert  # c: $ turns red below this balance
         self._transparent = background_transparent  # True → no background color
         self._data: dict | None  = None
         self._error: str | None  = None

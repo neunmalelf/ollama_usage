@@ -445,6 +445,7 @@ launch_gui(cookie=get_cookie_auto)
 - **Right-click** opens a context menu: refresh now, toggle size, or close.
 - **Auto-refreshes** every 30 seconds.
 - Remembers its last position between runs (unless `--position` is given).
+- With `--size compact` it draws one line whose width auto-fits the content — `olu (PRO) s: 42.0 % (02:46) | w: 77.0 % (1d 06:46) ws: 2 wr: 0 | c: $ 4.51`. The usage credit balance follows the web fetch count as `c: $` (two decimals, `0.00` when the page has no credit section, red below `--credit-alert`).
 - A status indicator in the top-right corner shows the autorefresh state: **A** by default, **M** when run with `--autorefresh-off`. It is **green** when the data is fresh and **red** when an error occurred (e.g. auth failure).
 
 ### Options
@@ -456,7 +457,7 @@ launch_gui(cookie=get_cookie_auto)
 | `--opacity` | `0.1` – `1.0` | `0.92` | Window opacity (`0.80` with `--background-transparent`) |
 | `--position` | `top-left`, `top-right`, `bottom-left`, `bottom-right` | *(last saved)* | Screen corner to place the widget |
 | `--background-transparent` | – | off | Fully transparent background — the text/bars float over the wallpaper. Native on Windows; needs **PySide6** on Linux/macOS (otherwise falls back to a translucent window) |
-| `--credit-alert` | amount (`$`) | `1.0` | Color the credit balance (`cr:`) **red** in the widget when it drops below this amount; a negative value disables the recolor |
+| `--credit-alert` | amount (`$`) | `1.0` | Color the credit balance (the `c: $` value at the end of the compact line) **red** in the widget when it drops below this amount; a negative value disables the recolor |
 
 ```bash
 # Default widget (dark, full, top-right)

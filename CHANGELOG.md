@@ -12,20 +12,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--dataonly`: the usage credit balance is appended as an eighth
   semicolon-separated field (`...;ws;wr;credit_balance`, two decimals,
   `0.00` when the page has no credit section).
-- `--credit-alert AMOUNT`: colors the widget credit balance (`cr:`) red when
-  it drops below AMOUNT (default: 1.0; a negative value disables the
-  recolor).
+- `--credit-alert AMOUNT`: colors the widget credit balance (the `c: $`
+  value at the end of the compact line) red when it drops below AMOUNT
+  (default: 1.0; a negative value disables the recolor).
 - Usage credit balance: the "Usage credit / Current balance" value on
   ollama.com/settings is parsed and exposed as `credit_balance` (float or
-  null) in the usage dict/JSON. The compact applet views now show it before
+  null) in the usage dict/JSON. The compact CLI views now show it before
   the web-search count as `cr: <balance> ` — two decimals, `0.00` when the
-  page has no credit section — in `--minidisplay`, `--minidisplay-horizontal`
-  and the desktop widget (Tk and Qt) compact line.
+  page has no credit section — in `--minidisplay` and
+  `--minidisplay-horizontal`.
 - `--dataonly`: prints one machine-readable line for scripts and agents —
   `subscription;percent_session;seconds_to_session_reset;percent_weekly;seconds_to_weekly_reset;ws;wr`
   (single fetch, no colors/countdown; e.g.
   `PRO;48.4;11880;49.3;172800;34;0`) so wrappers can track the remaining
   token contingent and the reset times.
+
+### Changed
+
+- The widget compact line shows the usage credit balance after the web fetch
+  count as `| c: $ <balance>` (two decimals, `0.00` when the page has no
+  credit section, red below `--credit-alert`) instead of `cr: <balance>`
+  before the search count — `olu (PRO) s: 42.0 % (02:46) | w: 77.0 %
+  (1d 06:46) ws: 2 wr: 0 | c: $ 4.51`. The CLI compact views are unchanged.
+- The `--widget` help text spells out the status letter: `A` (autorefresh by
+  default), `M` (manual refresh with `--autorefresh-off`).
 
 ### Fixed
 
