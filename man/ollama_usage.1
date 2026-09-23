@@ -235,7 +235,17 @@ the flag the GUI restores its saved darkmode setting (the widget defaults
 to dark).
 
 .BI \-\-size " " { compact , full }
-Widget size: full shows bars plus countdown, compact shows text only.
+Widget size: full shows bars plus countdown, compact shows text only as one
+auto-fitted line
+.br
+.nf
+olu (PRO) s: 42.0 % (02:46) | w: 77.0 % (1d 06:46) ws: 2 wr: 0 | c: $ 4.51
+.fi
+.br
+where
+.I c: $
+is the usage credit balance (two decimals, 0.00 when the page has no credit
+section).
 Restores the last used size when omitted.
 .TP
 .BI \-\-opacity " " 0.0\-1.0
@@ -253,7 +263,8 @@ with pip install ollama\-usage[widget]) and otherwise falls back to a
 translucent window with a warning.
 .TP
 .BI \-\-credit\-alert " " AMOUNT
-Color the credit balance (cr:) red in the widget when it drops below
+Color the credit balance (the c: $ value at the end of the widget's compact
+line) red when it drops below
 .I AMOUNT
 (default: 1.0; a negative value disables the recolor).
 .TP
