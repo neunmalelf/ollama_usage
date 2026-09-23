@@ -1,11 +1,11 @@
-.TH OLLAMA-USAGE 1 "September 2026" "ollama-usage 1.0" "User Commands"
+.TH OLLAMA_USAGE 1 "September 2026" "ollama_usage 1.0" "User Commands"
 .SH NAME
-ollama-usage \- check your Ollama Cloud quota usage
+ollama_usage \- check your Ollama Cloud quota usage
 .SH SYNOPSIS
-.B ollama-usage
+.B ollama_usage
 [\fIOPTIONS\fR]
 .SH DESCRIPTION
-.B ollama-usage
+.B ollama_usage
 reads your Ollama Cloud session cookie from a supported local browser and
 scrapes
 .B https://ollama.com/settings
@@ -181,7 +181,7 @@ Send desktop notifications when session, weekly or web search usage crosses a
 threshold.  Requires the
 .B notify
 extra (py\fIplyer\fR):
-.B pip install "ollama-usage[notify]".
+.B pip install "ollama_usage[notify]".
 Two levels are fired: a
 .B warning
 at the configured threshold (default 80%) and a
@@ -295,55 +295,55 @@ Close the GUI window and the desktop widget.
 Display current usage (auto-detects the browser):
 .sp
 .nf
-ollama-usage
+ollama_usage
 .fi
 .PP
 Output as JSON:
 .sp
 .nf
-ollama-usage --json
+ollama_usage --json
 .fi
 .PP
 Force a specific browser:
 .sp
 .nf
-ollama-usage --browser firefox
+ollama_usage --browser firefox
 .fi
 .PP
 Pass the cookie manually:
 .sp
 .nf
-ollama-usage --cookie YOUR_SESSION_COOKIE
+ollama_usage --cookie YOUR_SESSION_COOKIE
 .fi
 .PP
 Alert from a cron job (exit code 1 when usage exceeds 80%, no output):
 .sp
 .nf
-ollama-usage --quiet --alert 80
+ollama_usage --quiet --alert 80
 .fi
 .PP
 Single-line compact view with a 60-second refresh:
 .sp
 .nf
-ollama-usage --minidisplay --autorefresh 60
+ollama_usage --minidisplay --autorefresh 60
 .fi
 .PP
 Notify when usage crosses 75%:
 .sp
 .nf
-ollama-usage --notify --notify-threshold 75
+ollama_usage --notify --notify-threshold 75
 .fi
 .PP
 Desktop widget in light theme, compact size, bottom-right:
 .sp
 .nf
-ollama-usage --widget --theme light --size compact --position bottom-right
+ollama_usage --widget --theme light --size compact --position bottom-right
 .fi
 .PP
 Widget in the background:
 .sp
 .nf
-ollama-usage --widget --daemon
+ollama_usage --widget --daemon
 .fi
 .SH EXIT STATUS
 .TP

@@ -39,7 +39,7 @@ def _gui_refresh_timestamp(seconds_from_now: int) -> str:
 
 logger = logging.getLogger(__name__)
 
-APP_NAME = "ollama-usage"
+APP_NAME = "ollama_usage"
 
 
 def _resolve_icon() -> pathlib.Path:

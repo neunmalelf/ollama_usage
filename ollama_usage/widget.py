@@ -507,7 +507,7 @@ class OllamaWidget:
         r.wm_attributes("-alpha", self._opacity)
         r.configure(bg=self._bg_color())
         r.resizable(False, False)
-        r.title("ollama-usage")
+        r.title("ollama_usage")
 
     def _setup_canvas(self) -> None:
         t = self._theme

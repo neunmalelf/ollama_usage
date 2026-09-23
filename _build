@@ -1,5 +1,5 @@
 #!/bin/bash
-# _build - build ollama-usage into a single self-contained binary with Nuitka
+# _build - build ollama_usage into a single self-contained binary with Nuitka
 #          and deploy it to the platform destination folder, optionally
 #          release it via gh.
 #   usage: ./_build [OPTIONS]
@@ -17,7 +17,7 @@
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20260923101941"
+__VERSION__="1.0.20260923114844"
 
 set -e
 
@@ -29,7 +29,7 @@ NO_INSTALL=0
 # --- usage -------------------------------------------------------------------
 usage() {
     cat <<EOF
-_build v${__VERSION__} - build ollama-usage into a single binary with Nuitka
+_build v${__VERSION__} - build ollama_usage into a single binary with Nuitka
 
 usage: ./_build [OPTIONS]
 
@@ -67,7 +67,7 @@ case "${1:-}" in
 esac
 
 echo ""
-echo "[_build] v${__VERSION__} - build ollama-usage standalone binary"
+echo "[_build] v${__VERSION__} - build ollama_usage standalone binary"
 echo ""
 
 # =============================================================================
@@ -92,9 +92,9 @@ CONFIGURATION_FINAL_BINARY_DESTINATION_WINDOWS="/b/winsbin"          # Windows (
 # --- docs installed alongside the binary --------------------------------------
 CONFIGURATION_MAN_PAGE="man/ollama_usage.1"
 CONFIGURATION_MAN_DEST="$HOME/.local/share/man/man1"      # user-local, picked up by mandb
-CONFIGURATION_TLDR_PAGE="tldr/ollama-usage.md"            # source page in this repo
+CONFIGURATION_TLDR_PAGE="tldr/ollama_usage.md"            # source page in this repo
 CONFIGURATION_TLDR_DEST="$HOME/.local/share/tealdeer/pages/"  # tealdeer custom pages dir
-CONFIGURATION_TLDR_NAME="ollama-usage.page.md"            # tealdeer serves ONLY '<name>.page.md'
+CONFIGURATION_TLDR_NAME="ollama_usage.page.md"            # tealdeer serves ONLY '<name>.page.md'
                                                           # from the custom pages dir - a plain
                                                           # '<name>.md' there is never rendered
 # =============================================================================
@@ -199,7 +199,7 @@ install_docs() {
         echo "[_build] WARNING: $tldr_src not found - skipping tldr page" >&2
     fi
 
-    # Refresh the man database so `man ollama-usage` resolves immediately.
+    # Refresh the man database so `man ollama_usage` resolves immediately.
     if command -v mandb >/dev/null 2>&1; then
         echo "[_build] updating man database (mandb)..."
         mandb -q "$HOME/.local/share/man" 2>/dev/null || true
@@ -209,7 +209,7 @@ install_docs() {
 # --- get version from the source __version__ ---------------------------------
 VERSION=$("$CONFIGURATION_PYTHON" -c "from ollama_usage import __version__ as v; print(v)" 2>/dev/null || echo "0.0.0")
 [ -n "$VERSION" ] || VERSION="0.0.0"
-echo "[_build] ollama-usage version: $VERSION"
+echo "[_build] ollama_usage version: $VERSION"
 
 # Windows version metadata (16-bit fields, max 65535; collapse long digit runs
 # like a YYYYMMDDhhmmss timestamp into the first 5 digits).
@@ -354,7 +354,7 @@ case "$(uname -s)" in
         C_BACKEND_OPTION=()
         ;;
 esac
-echo "[_build] compiling ollama-usage with nuitka (onefile, ${CONFIGURATION_JOBS} C compiler job(s))..."
+echo "[_build] compiling ollama_usage with nuitka (onefile, ${CONFIGURATION_JOBS} C compiler job(s))..."
 unset CC CXX
 "$CONFIGURATION_PYTHON" -m nuitka \
     --onefile \
@@ -365,7 +365,7 @@ unset CC CXX
     "${TCL_OPTIONS[@]}" \
     "${ICON_OPTION[@]}" \
     "${QT_PLUGIN_OPTION[@]}" \
-    --product-name="ollama-usage" \
+    --product-name="ollama_usage" \
     --product-version="${WIN_VERSION}" \
     --file-version="${WIN_VERSION}" \
     --file-description="Ollama Cloud quota usage checker" \
@@ -413,7 +413,7 @@ if [ "$DO_RELEASE" -eq 1 ]; then
         echo "[_build] creating GitHub release via gh CLI: $TAG with $FINAL"
         gh release create "$TAG" "$FINAL" \
             --title "$TAG" \
-            --notes "Automated standalone binary release for ollama-usage $VERSION" || {
+            --notes "Automated standalone binary release for ollama_usage $VERSION" || {
             echo "[_build] WARNING: gh release create failed" >&2
         }
     else

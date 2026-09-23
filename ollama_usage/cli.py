@@ -584,6 +584,7 @@ def _warn_transparent_fallback(args) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
+        prog="ollama_usage",
         description="Display your Ollama Cloud quota usage",
         epilog=(
             "  keyboard shortcuts:\n"
@@ -596,7 +597,7 @@ def main():
         formatter_class=_HelpFormatter,
     )
     parser.add_argument(
-        "-v", "--version", action="version", version=f"ollama-usage {_get_version()}"
+        "-v", "--version", action="version", version=f"ollama_usage {_get_version()}"
     )
     parser.add_argument(
         "--dataonly", action="store_true",
@@ -928,7 +929,7 @@ def main():
         if args.notify and not notify_available():
             print(
                 "Warning: --notify requires plyer. Install it with: "
-                "pip install ollama-usage[notify]",
+                "pip install ollama_usage[notify]",
                 file=sys.stderr,
             )
 

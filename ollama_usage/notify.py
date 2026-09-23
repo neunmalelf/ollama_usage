@@ -53,14 +53,14 @@ def _send(title: str, message: str) -> None:
     """Send a desktop notification via plyer."""
     if not _HAS_PLYER:
         logger.warning(
-            "plyer is not installed — install it with: pip install ollama-usage[notify]"
+            "plyer is not installed — install it with: pip install ollama_usage[notify]"
         )
         return
     try:
         _plyer_notification.notify(
             title=title,
             message=message,
-            app_name="ollama-usage",
+            app_name="ollama_usage",
             timeout=8,
         )
         logger.debug("Notification sent: %s — %s", title, message)
