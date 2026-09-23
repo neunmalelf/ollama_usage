@@ -8,13 +8,16 @@
 #     --no-install  build the binary without deploying it to the destination folder
 #     -h, --help    show this help and exit
 #     --version     show the _build version and exit
+#   env:
+#     BUILD_JOBS=<n>  parallel C compiler jobs (default: 1, capped at half the
+#                     logical CPUs) - raise it only on explicit request
 #   produces: dist/ollama_usage[.exe] - one binary with Python + stdlib +
 #             ollama_usage bundled. The end user needs NO Python, pip or venv.
 #
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20260922052442Z"
+__VERSION__="1.0.20260923101941"
 
 set -e
 
@@ -35,6 +38,11 @@ options:
   --no-install  build the binary without deploying it to the destination folder
   -h, --help    show this help and exit
   --version     show the _build version and exit
+
+env:
+  BUILD_JOBS=<n>  parallel C compiler jobs. Default 1 - a build must never
+                  peg the CPU; raise it only on explicit request and never
+                  above half the logical CPUs (a higher value is capped).
 
 output: dist/ollama_usage[.exe] - one self-contained binary with Python + stdlib +
         ollama_usage bundled. The end user needs NO Python, pip or venv installed.
@@ -102,6 +110,24 @@ case "$(uname -s)" in
         ICON_OPTION=()
         ;;
 esac
+
+# --- C compiler parallelism (nuitka --jobs) -----------------------------------
+# Default 1 worker: a build must never peg the CPU. BUILD_JOBS=<n> raises it on
+# explicit request only and is capped at half the logical CPUs.
+CONFIGURATION_JOBS="${BUILD_JOBS:-1}"
+if ! [[ "$CONFIGURATION_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[_build] ERROR: BUILD_JOBS must be a positive integer (got '$CONFIGURATION_JOBS')" >&2
+    exit 1
+fi
+JOBS_MAX=$(( $(nproc 2>/dev/null || echo 2) / 2 ))
+if [ "$JOBS_MAX" -lt 1 ]; then
+    JOBS_MAX=1
+fi
+if [ "$CONFIGURATION_JOBS" -gt "$JOBS_MAX" ]; then
+    echo "[_build] BUILD_JOBS=$CONFIGURATION_JOBS is above half the logical CPUs - capped at $JOBS_MAX"
+    CONFIGURATION_JOBS="$JOBS_MAX"
+fi
+JOBS_OPTION=(--jobs="$CONFIGURATION_JOBS")
 
 # --- deploy the built binary to the platform destination folder ---------------
 install_binaries() {
@@ -328,10 +354,11 @@ case "$(uname -s)" in
         C_BACKEND_OPTION=()
         ;;
 esac
-echo "[_build] compiling ollama-usage with nuitka (onefile)..."
+echo "[_build] compiling ollama-usage with nuitka (onefile, ${CONFIGURATION_JOBS} C compiler job(s))..."
 unset CC CXX
 "$CONFIGURATION_PYTHON" -m nuitka \
     --onefile \
+    "${JOBS_OPTION[@]}" \
     "${C_BACKEND_OPTION[@]}" \
     --enable-plugin=tk-inter \
     --enable-plugin=dill-compat \
