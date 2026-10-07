@@ -1,11 +1,5 @@
-__pycache__/
-0_bak/*
-*.pyc
 *.pyo
 .env
-dist/
 build/
 *.egg-info/
-.venv/
-.pytest_cache/
 *.txt
