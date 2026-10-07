@@ -1,0 +1,3 @@
+# Full type checking; without a configuration Pyrefly only runs its minimal "basic" preset.
+# (Set machine-wide on 2026-10-07, recipe in the ddadmin wiki card kate_editor/lsp_pyrefly_and_pylsp.)
+preset = "default"
