@@ -511,26 +511,55 @@ class TestCreditBalance:
             ("€7,25", 7.25),
         ],
     )
-    def test_amount_before_current_balance_label(self, amount: str, expected: float) -> None:
+    def test_amount_from_extra_usage_balance_element(
+        self, amount: str, expected: float
+    ) -> None:
+        html = make_html(
+            credit_html='<span id="extra-usage-balance" '
+            f'class="text-xl font-medium tabular-nums">{amount}</span>'
+        )
+        assert parse_html(html)["credit_balance"] == expected
+
+    def test_element_with_nested_markup_and_whitespace(self) -> None:
+        html = make_html(
+            credit_html='<span id="extra-usage-balance" class="tabular-nums">\n'
+            "  $<span>4.42</span>\n</span>"
+        )
+        assert parse_html(html)["credit_balance"] == 4.42
+
+    def test_element_wins_over_legacy_label(self) -> None:
+        html = make_html(
+            credit_html='<span id="extra-usage-balance">$4.42</span>'
+            "<span>$9.99</span> Current balance"
+        )
+        assert parse_html(html)["credit_balance"] == 4.42
+
+    @pytest.mark.parametrize(
+        "amount, expected",
+        [("$4.51", 4.51), ("$0.00", 0.0), ("12,5", 12.5)],
+    )
+    def test_legacy_amount_before_current_balance_label(
+        self, amount: str, expected: float
+    ) -> None:
         html = make_html(credit_html=f"<span>{amount}</span> Current balance")
         assert parse_html(html)["credit_balance"] == expected
 
-    def test_label_with_intervening_tags(self) -> None:
+    def test_legacy_label_with_intervening_tags(self) -> None:
         html = make_html(
             credit_html='<div><span class="tabular-nums">$4.51</span>'
             "<span>Current balance</span></div>"
         )
         assert parse_html(html)["credit_balance"] == 4.51
 
-    def test_make_html_helper(self) -> None:
-        html = make_html(credit_html='<span class="text-sm">$4.51</span> Current balance')
-        assert parse_html(html)["credit_balance"] == 4.51
-
     def test_absent_is_none(self, free_html: str) -> None:
         assert parse_html(free_html)["credit_balance"] is None
 
+    def test_empty_element_is_none(self) -> None:
+        html = make_html(credit_html='<span id="extra-usage-balance"></span>')
+        assert parse_html(html)["credit_balance"] is None
+
     def test_type_is_float(self) -> None:
-        html = make_html(credit_html="$4.51 Current balance")
+        html = make_html(credit_html='<span id="extra-usage-balance">$4.51</span>')
         assert isinstance(parse_html(html)["credit_balance"], float)
 
 

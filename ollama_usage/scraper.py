@@ -51,11 +51,18 @@ _WEB_FETCH_SEGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Usage credit / current balance: an amount (optionally prefixed with a
-# currency symbol) rendered right before the "Current balance" label of the
-# "Usage credit" section, e.g. "<span>$4.51</span>Current balance". The
-# amount and the label may be separated by closing tags and whitespace.
-_CREDIT_BALANCE_RE = re.compile(
+# Usage credit balance: the amount is the text of the element whose stable id
+# is "extra-usage-balance" in the "Usage credits" section of the settings
+# page, e.g. <span id="extra-usage-balance" class="...">$4.42</span>.
+_CREDIT_BALANCE_ID_RE = re.compile(
+    r'id="extra-usage-balance"[^>]*>\s*(.*?)\s*</span>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Older layout (page as of 2026-09): the amount was rendered right before the
+# "Current balance" label, e.g. "<span>$4.51</span>Current balance"; the amount
+# and the label may be separated by closing tags and whitespace.
+_CREDIT_BALANCE_LABEL_RE = re.compile(
     r"([$€£]?\s*[\d.,]+)\s*(?:<[^>]*>\s*)*Current\s+balance",
     re.IGNORECASE,
 )
@@ -248,14 +255,18 @@ def _extract_web_fetch_requests(html: str) -> int | None:
 def _extract_credit_balance(html: str) -> float | None:
     """Extract the usage credit / current balance shown on the page.
 
-    The balance is rendered as an amount (optionally prefixed with a currency
-    symbol) directly before the "Current balance" label. Returns None when
-    the section is absent (e.g. plans without usage credit).
+    The balance is the text of the ``extra-usage-balance`` element of the
+    "Usage credits" section; pages using the older layout render the amount
+    directly before a "Current balance" label instead. Returns None when the
+    section is absent (e.g. plans without usage credit).
     """
-    match = _CREDIT_BALANCE_RE.search(html)
-    if not match:
+    match = _CREDIT_BALANCE_ID_RE.search(html)
+    if match is None:
+        match = _CREDIT_BALANCE_LABEL_RE.search(html)
+    if match is None:
         return None
-    raw = re.sub(r"[^\d.,]", "", match.group(1))  # drop currency symbol/space
+    raw = re.sub(r"<[^>]*>", "", match.group(1))  # drop nested markup
+    raw = re.sub(r"[^\d.,]", "", raw)  # drop currency symbol/space
     if "," in raw and "." in raw:
         raw = raw.replace(",", "")  # 1,234.56 — comma is a thousands separator
     elif "," in raw:

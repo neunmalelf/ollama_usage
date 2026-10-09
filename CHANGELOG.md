@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.ollama-usage-widget.cfg`) keep their names — they are the migration
   source for older releases.
 
+### Fixed
+
+- Usage credit balance: `ollama.com/settings` moved the amount into a
+  dedicated element (`<span id="extra-usage-balance">` under the "Usage
+  credits" heading) and dropped the "Current balance" label, so the parser
+  returned `null` and every view showed `0.00`. The balance is now read from
+  that element; the old amount-before-"Current balance" layout stays
+  supported as a fallback.
+
 ## [3.0.20260923113912] - 2026-09-23
 
 ### Added

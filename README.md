@@ -298,7 +298,7 @@ Terminal colors (ANSI, self-contained — no external dependency):
 }
 ```
 
-`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `credit_balance` is the "Usage credit / Current balance" amount (two-decimal float, `null` when the section is absent). `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
+`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `credit_balance` is the balance of the "Usage credits" section (two-decimal float, `null` when the section is absent). `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
 
 ---
 
