@@ -12,6 +12,19 @@ from ollama_usage.scraper import parse_html, plan_display_name
 # Helpers
 # ---------------------------------------------------------------------------
 
+#: Usage-credits block as rendered on ollama.com/settings for a paid plan.
+#: The balance element is what the parser has to find; a paid plan's page
+#: always carries the block, so the fixtures build it unless told otherwise
+#: (``credit_html=""``).
+CREDIT_BLOCK_HTML = (
+    '<div id="extra-usage">'
+    '<h2 class="text-xl font-medium">Usage credits</h2>'
+    '<span id="extra-usage-balance" class="text-xl font-medium tabular-nums">'
+    "$4.42</span>"
+    "</div>"
+)
+
+
 def make_html(
     plan: str = "free",
     session_pct: float = 0.0,
@@ -20,10 +33,14 @@ def make_html(
     weekly_time: str = "2026-04-06T00:00:00Z",
     web_search_requests: int | None = None,
     web_fetch_requests: int | None = None,
-    credit_html: str = "",
+    credit_html: str | None = None,
     models: list[tuple[str, int]] | None = None,
 ) -> str:
     """Build a minimal but realistic settings page HTML fragment."""
+    if credit_html is None:
+        # Paid plans always show the usage-credits block; pass credit_html=""
+        # to build a page without it (e.g. for a free plan).
+        credit_html = "" if plan == "free" else CREDIT_BLOCK_HTML
     segment = ""
     if web_search_requests is not None:
         segment += (
@@ -64,6 +81,7 @@ def make_html_real(
     weekly_pct: float = 27.9,
     weekly_time: str = "2026-08-24T00:00:00Z",
     aria_labels: bool = True,
+    credit_html: str | None = None,
 ) -> str:
     """Build HTML matching the current ollama.com/settings layout.
 
@@ -72,6 +90,9 @@ def make_html_real(
     later. This reproduces the bug where the weekly line showed the
     session's reset time.
     """
+    if credit_html is None:
+        credit_html = "" if plan == "free" else CREDIT_BLOCK_HTML
+
     def meter(label: str, pct: float, resets_at: str) -> str:
         attrs = f' aria-label="{label} {pct}% used"' if aria_labels else ""
         return (
@@ -90,6 +111,7 @@ def make_html_real(
     <div class="text-sm">{weekly_pct}% used</div>
     {meter("Session usage", session_pct, session_time)}
     {meter("Weekly usage", weekly_pct, weekly_time)}
+    {credit_html}
     """
 
 
@@ -101,12 +123,15 @@ def make_html_reversed(
     weekly_time: str = "2026-04-06T00:00:00Z",
     web_search_requests: int | None = None,
     web_fetch_requests: int | None = None,
+    credit_html: str | None = None,
 ) -> str:
     """Build HTML with Weekly usage appearing BEFORE Session usage.
 
     This tests that parsing is order-independent and correctly associates
     percentages with their labeled sections.
     """
+    if credit_html is None:
+        credit_html = "" if plan == "free" else CREDIT_BLOCK_HTML
     segment = ""
     if web_search_requests is not None:
         segment += (
@@ -127,6 +152,7 @@ def make_html_reversed(
     <span class="text-sm">{session_pct}% used</span>
     <div class="local-time" data-time="{session_time}">Resets soon</div>
     {segment}
+    {credit_html}
     """
 
 
@@ -426,7 +452,7 @@ class TestReversedOrderParsing:
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
             "web_fetch_requests": None,
-            "credit_balance": None,
+            "credit_balance": 4.42,
             "models": None,
         }
 
@@ -482,7 +508,7 @@ class TestRealPageLayout:
             "weekly": {"used_pct": 80.0, "resets_at": "2026-08-24T00:00:00Z"},
             "web_search_requests": None,
             "web_fetch_requests": None,
-            "credit_balance": None,
+            "credit_balance": 4.42,
             "models": None,
         }
 
@@ -554,9 +580,11 @@ class TestCreditBalance:
     def test_absent_is_none(self, free_html: str) -> None:
         assert parse_html(free_html)["credit_balance"] is None
 
-    def test_empty_element_is_none(self) -> None:
+    def test_empty_element_is_a_layout_error(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
         html = make_html(credit_html='<span id="extra-usage-balance"></span>')
-        assert parse_html(html)["credit_balance"] is None
+        with pytest.raises(LayoutChangedError):
+            parse_html(html)
 
     def test_type_is_float(self) -> None:
         html = make_html(credit_html='<span id="extra-usage-balance">$4.51</span>')
@@ -594,7 +622,7 @@ class TestOutputStructure:
             "weekly": {"used_pct": 80.0, "resets_at": "2026-04-07T00:00:00Z"},
             "web_search_requests": None,
             "web_fetch_requests": None,
-            "credit_balance": None,
+            "credit_balance": 4.42,
             "models": None,
         }
 
@@ -648,21 +676,28 @@ class TestParseErrors:
             parse_html(html)
 
     def test_parse_error_missing_weekly_pct(self) -> None:
+        """Both meters are labelled, but the weekly one carries no percentage."""
         html = """
         <span class="capitalize">free</span>
+        <span class="text-sm">Session usage</span>
         <span class="text-sm">0% used</span>
         <div class="local-time" data-time="2026-04-04T17:00:00Z"></div>
+        <span class="text-sm">Weekly usage</span>
+        <div class="local-time" data-time="2026-04-06T00:00:00Z"></div>
         """
-        with pytest.raises(ParseError, match="percentages"):
+        with pytest.raises(ParseError, match="weekly usage percentage"):
             parse_html(html)
 
     def test_parse_error_missing_reset_times(self) -> None:
+        """Both meters are labelled and used, but none carries a reset time."""
         html = """
         <span class="capitalize">free</span>
-        <span class="text-sm">0% used</span>
+        <span class="text-sm">Session usage</span>
+        <span class="text-sm">1.5% used</span>
+        <span class="text-sm">Weekly usage</span>
         <span class="text-sm">27.9% used</span>
         """
-        with pytest.raises(ParseError, match="timestamps"):
+        with pytest.raises(ParseError, match="session reset time"):
             parse_html(html)
 
     def test_parse_error_missing_plan(self) -> None:
@@ -679,6 +714,74 @@ class TestParseErrors:
         from ollama_usage.exceptions import OllamaUsageError
         with pytest.raises(OllamaUsageError):
             parse_html("")
+
+    # --- a redesigned page must fail loudly, never as "0.00" ---------------
+
+    def test_credits_block_without_balance_is_a_layout_change(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        for plan in ("free", "pro"):
+            html = make_html(
+                plan=plan,
+                credit_html='<h2>Usage credits</h2><div id="extra-usage">top up</div>',
+            )
+            with pytest.raises(LayoutChangedError, match="Usage credits"):
+                parse_html(html)
+
+    def test_credit_element_without_amount_is_a_layout_change(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        html = make_html(credit_html='<span id="extra-usage-balance"></span>')
+        with pytest.raises(LayoutChangedError, match="could not be read"):
+            parse_html(html)
+
+    def test_credit_element_with_text_instead_of_amount(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        html = make_html(credit_html='<span id="extra-usage-balance">n/a</span>')
+        with pytest.raises(LayoutChangedError, match="n/a"):
+            parse_html(html)
+
+    def test_paid_plan_without_any_credit_trace_is_a_layout_change(self) -> None:
+        # A paid plan's page shows the usage-credits block. If nothing on the
+        # page points at it, either the layout changed or the account really
+        # has no usage credit - both are worth an error, never a silent 0.00.
+        from ollama_usage.exceptions import LayoutChangedError
+        with pytest.raises(LayoutChangedError, match="no trace of a"):
+            parse_html(make_html(plan="pro", credit_html=""))
+
+    def test_free_plan_without_credit_section_is_not_an_error(self, free_html: str) -> None:
+        assert parse_html(free_html)["credit_balance"] is None
+
+    def test_request_segment_without_count_is_a_layout_change(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        html = make_html() + (
+            '<button data-usage-segment data-model="web search" '
+            'aria-label="web search: 30 requests"></button>'
+        )
+        with pytest.raises(LayoutChangedError, match="web search request segment"):
+            parse_html(html)
+
+    def test_absent_web_fetch_segment_is_not_an_error(self) -> None:
+        data = parse_html(make_html())
+        assert data["web_fetch_requests"] is None
+
+    def test_models_list_with_unreadable_rows_is_a_layout_change(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        html = make_html() + (
+            '<div id="weekly-usage-models"><div>Models used this week</div>'
+            "<div><span>glm-5.3-flash</span><span>4 requests</span></div></div>"
+        )
+        with pytest.raises(LayoutChangedError, match="none of its rows"):
+            parse_html(html)
+
+    def test_layout_change_carries_the_anchor_inventory(self) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        html = make_html(plan="pro", credit_html="<h2>Usage credits</h2>")
+        with pytest.raises(LayoutChangedError) as exc:
+            parse_html(html)
+        found, _, missing = exc.value.detail.partition("missing:")
+        assert found.startswith("anchors found: ")
+        assert "credits heading" in found
+        assert "credits balance" in missing
+        assert isinstance(exc.value, ParseError)
 
 # ---------------------------------------------------------------------------
 # _fetch_html - couverture réseau (lignes 52-70)
@@ -762,13 +865,13 @@ class TestGetUsage:
         from unittest.mock import patch
         from ollama_usage.scraper import get_usage
 
-        html = """
-        <span class="capitalize">free</span>
-        <span class="text-sm">0.0% used</span>
-        <span class="text-sm">33.3% used</span>
-        <div class="local-time" data-time="2026-04-04T17:00:00Z"></div>
-        <div class="local-time" data-time="2026-04-06T00:00:00Z"></div>
-        """
+        html = make_html(
+            plan="free",
+            session_pct=0.0,
+            session_time="2026-04-04T17:00:00Z",
+            weekly_pct=33.3,
+            weekly_time="2026-04-06T00:00:00Z",
+        )
         with patch("urllib.request.urlopen", return_value=self._make_response(html)):
             result = get_usage("my-cookie")
 

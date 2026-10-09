@@ -298,7 +298,7 @@ Terminal colors (ANSI, self-contained — no external dependency):
 }
 ```
 
-`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `credit_balance` is the balance of the "Usage credits" section (two-decimal float, `null` when the section is absent). `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
+`web_search_requests` and `web_fetch_requests` are the total numbers of web search / web fetch requests on the page. `credit_balance` is the balance of the "Usage credits" section (two-decimal float, `null` for a free plan without that block). A page whose expected elements are missing is reported as an error and not as a `null` - see "When ollama.com changes". `models` is a list of `{name, requests}` objects (per-model counts from the "Models used this week" list). All are `null` when absent.
 
 ---
 
@@ -316,6 +316,36 @@ if ! ollama_usage --quiet --alert 75; then
   echo "Quota running low!"
 fi
 ```
+
+---
+
+## When ollama.com changes
+
+Every value comes from an element the parser expects to find: the plan badge,
+both usage meters (with their `% used` and `data-time`), the request-count
+segments, the balance element `#extra-usage-balance`, and the "Models used this
+week" list. When a redesign moves or renames one of them, the tool does **not**
+fall back to `0.00`/`null` and carry on. It writes nothing to stdout, explains
+on stderr what it expected and which anchors it found, and exits with code 1:
+
+```
+Error: the "Usage credits" balance - the text of <span id="extra-usage-balance">$4.42</span>, or on the pre-2026-10 layout an amount right before a "Current balance" label - could not be found on ollama.com/settings
+       anchors found: plan badge, session meter, weekly meter, usage segments, credits heading, credits section, models list; missing: credits balance, legacy balance label
+ollama.com/settings seems to have changed its layout, so the values could not be read and nothing was printed.
+```
+
+So a printed `0.00` always means "this account has no usage credit", never
+"could not read it". Two cases are worth knowing:
+
+- A **free** plan whose page has no usage-credits block parses to
+  `credit_balance: null` (shown as `0.00`) - the normal, correct result.
+- A **paid** plan without any trace of that block is treated as a layout change:
+  the block belongs there, so its absence is reported instead of guessed.
+
+Scripts reading `--dataonly`/`--json` see an empty stdout plus exit code 1; the
+widget and the GUI keep running and show the message in red. Report the change
+(the "anchors found/missing" line is the useful part) at
+https://github.com/neunmalelf/ollama_usage/issues and update the tool.
 
 ---
 

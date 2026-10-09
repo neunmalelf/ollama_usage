@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dotted settings files (`~/.ollama-usage-gui.cfg`,
   `~/.ollama-usage-widget.cfg`) keep their names — they are the migration
   source for older releases.
+- Missing or unreadable page elements are now reported as a layout change
+  instead of being treated as "empty". `parse_html` raises the new
+  `LayoutChangedError` (a `ParseError`) when the page carries a trace of a
+  section whose value cannot be read: the usage-credits block (heading,
+  `#extra-usage` container or the legacy "Current balance" label) without a
+  parseable balance, a request segment whose `data-requests` count is gone, or
+  request counts in the "Models used this week" list whose rows cannot be
+  parsed. A paid plan without any trace of the usage-credits block errors too;
+  only a free plan without that block still reports a `null` balance.
+- The positional fallback that guessed which percentage was session and which
+  weekly (used when both meters had lost their labels) is gone - it could
+  silently swap the two numbers and their reset times. That case is now a
+  layout change.
+- The CLI explains a layout change on stderr (what was expected, which anchors
+  were found and missing, where to report it), writes nothing to stdout and
+  exits 1 without dumping the argparse help; the "cookie may have expired"
+  hint is limited to real authentication errors. The widget and the GUI show
+  the same message in their error line.
 
 ### Fixed
 

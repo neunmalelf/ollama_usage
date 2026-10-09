@@ -24,6 +24,7 @@ from ollama_usage.cookie import (
 )
 from ollama_usage.exceptions import (
     AuthError,  # We also need AuthError here
+    LayoutChangedError,
     NetworkError,
     OllamaUsageError,
 )
@@ -1045,8 +1046,21 @@ def main():
         if alert_triggered:
             raise SystemExit(1)
 
+    except LayoutChangedError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        if e.detail:
+            print(f"       {e.detail}", file=sys.stderr)
+        print(
+            "ollama.com/settings seems to have changed its layout, so the "
+            "values could not be read and nothing was printed.\n"
+            "Please report the line above at "
+            "https://github.com/neunmalelf/ollama_usage/issues and update "
+            "ollama_usage - until then its numbers cannot be trusted.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     except OllamaUsageError as e:
-        if config.load_saved_cookie():
+        if isinstance(e, AuthError) and config.load_saved_cookie():
             print(
                 "Hint: the stored cookie may have expired — update it with: "
                 "ollama_usage --save-cookie <value>, or remove it with "

@@ -263,6 +263,60 @@ class TestAutorefreshInterval:
 
 
 # ---------------------------------------------------------------------------
+# ollama.com layout changes must be reported, not swallowed
+# ---------------------------------------------------------------------------
+
+class TestLayoutChangedErrorOutput:
+    """A redesigned settings page must explain itself and quit."""
+
+    def _run_dataonly(self, capsys, exc: Exception, saved_cookie="stored-cookie"):
+        from ollama_usage.cli import main
+        with patch("ollama_usage.cli.get_cookie_auto", return_value="fake-cookie"), \
+             patch("ollama_usage.cli.get_usage", side_effect=exc), \
+             patch("ollama_usage.cli.config.load_saved_cookie",
+                   return_value=saved_cookie), \
+             patch("sys.argv", ["ollama_usage", "--dataonly"]), \
+             pytest.raises(SystemExit) as exit_info:
+            main()
+        captured = capsys.readouterr()
+        return exit_info.value.code, captured.out, captured.err
+
+    def test_layout_change_explains_and_quits(self, capsys) -> None:
+        from ollama_usage.exceptions import LayoutChangedError
+        code, out, err = self._run_dataonly(
+            capsys,
+            LayoutChangedError(
+                'the "Usage credits" balance could not be found on '
+                "ollama.com/settings",
+                "anchors found: plan badge; missing: credits balance",
+            ),
+        )
+        assert code == 1
+        assert out == ""  # nothing that could be mistaken for data
+        assert 'the "Usage credits" balance could not be found' in err
+        assert "anchors found: plan badge" in err
+        assert "changed its layout" in err
+        assert "issues" in err  # where to report it
+        assert "usage: ollama_usage" not in err  # no argparse help dump
+        assert "cookie" not in err  # no misleading cookie hint
+
+    def test_cookie_hint_still_shown_for_auth_errors(self, capsys) -> None:
+        from ollama_usage.exceptions import AuthError
+        code, out, err = self._run_dataonly(capsys, AuthError("cookie is invalid"))
+        assert code == 1
+        assert out == ""
+        assert "Hint: the stored cookie may have expired" in err
+
+    def test_no_cookie_hint_for_other_errors(self, capsys) -> None:
+        from ollama_usage.exceptions import NetworkError
+        code, out, err = self._run_dataonly(capsys, NetworkError("boom"))
+        assert code == 1
+        assert out == ""
+        assert "boom" in err
+        assert "Hint: the stored cookie" not in err
+
+
+# ---------------------------------------------------------------------------
 # Output coloration and TTY checks
 # ---------------------------------------------------------------------------
 

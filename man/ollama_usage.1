@@ -100,7 +100,8 @@ seconds until the session quota resets,
 percent used this week,
 seconds until the weekly quota resets,
 web search requests, web fetch requests and the usage credit balance
-(two decimals, 0.00 when absent) of the current session.
+(two decimals, 0.00 when the account has no usage-credits block) of the
+current session.
 Percentages have one decimal and no
 .IR % " sign; seconds are"
 0 when the quota is due.
@@ -115,7 +116,8 @@ Output the usage as JSON.  The top-level object contains the fields
 .IR web_search_requests ,
 .IR web_fetch_requests ,
 .IR credit_balance
-(the balance of the "Usage credits" section, null when absent)
+(the balance of the "Usage credits" section, null for a free plan
+without that block)
 and
 .IR models
 (a list of \fI{name, requests}\fR objects).  Fields are
@@ -352,7 +354,11 @@ Success, or the alert threshold was not exceeded.
 .TP
 .B 1
 An alert threshold was exceeded, or an error occurred (authentication
-failure, network error, parse error, invalid arguments).
+failure, network error, parse error, invalid arguments).  This includes a
+changed layout of the ollama.com settings page: the program then writes
+nothing to standard output, explains on standard error which element it
+expected, and stops instead of reporting a wrong value such as
+.BR 0.00 .
 .SH ENVIRONMENT
 .TP
 .B OLLAMA_BROWSER_COOKIE

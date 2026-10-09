@@ -9,7 +9,13 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from ollama_usage.exceptions import AuthError, NetworkError, OllamaUsageError, ParseError
+from ollama_usage.exceptions import (
+    AuthError,
+    LayoutChangedError,
+    NetworkError,
+    OllamaUsageError,
+    ParseError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +57,13 @@ _WEB_FETCH_SEGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The segments' anchors and the payload they must carry: a segment that is on
+# the page without its count means the markup changed, and reporting 0 for it
+# would silently claim "no requests in this period".
+_WEB_SEARCH_ANCHOR = 'data-model="web search"'
+_WEB_FETCH_ANCHOR = 'data-model="web fetch"'
+_REQUESTS_ATTRIBUTE = 'data-requests="<count>"'
+
 # Usage credit balance: the amount is the text of the element whose stable id
 # is "extra-usage-balance" in the "Usage credits" section of the settings
 # page, e.g. <span id="extra-usage-balance" class="...">$4.42</span>.
@@ -75,6 +88,65 @@ _MODEL_ITEM_RE = re.compile(
     r'<span[^>]*>\s*(\d+)\s*requests',
     re.IGNORECASE,
 )
+
+# Anchors of the settings page this parser relies on. They are checked before
+# a value is read, and they describe the page in LayoutChangedError details
+# ("anchors found: ...; missing: ...").
+_PAGE_ANCHORS: dict[str, re.Pattern[str]] = {
+    "plan badge": re.compile(r'class="[^"]*\bcapitalize\b', re.IGNORECASE),
+    "session meter": re.compile(r"session\s+usage", re.IGNORECASE),
+    "weekly meter": re.compile(r"weekly\s+usage", re.IGNORECASE),
+    "usage segments": re.compile(r"data-usage-segment", re.IGNORECASE),
+    "credits heading": re.compile(r"<h[1-6][^>]*>\s*usage\s+credits?\b", re.IGNORECASE),
+    "credits section": re.compile(r'id="extra-usage"[\s>]', re.IGNORECASE),
+    "credits balance": re.compile(r'id="extra-usage-balance"', re.IGNORECASE),
+    "legacy balance label": re.compile(r"current\s+balance", re.IGNORECASE),
+    "models list": re.compile(r'id="weekly-usage-models"', re.IGNORECASE),
+}
+
+# Any trace of the usage-credits block: heading, container, balance element or
+# the label of the older layout. When one of these is on the page the block is
+# there, so its balance must be readable.
+_CREDIT_BLOCK_ANCHORS = (
+    "credits heading",
+    "credits section",
+    "credits balance",
+    "legacy balance label",
+)
+
+# The usage credit balance, spelled out for the "expected ..." error messages.
+_CREDIT_EXPECTATION = (
+    'the "Usage credits" balance - the text of '
+    '<span id="extra-usage-balance">$4.42</span>, or on the pre-2026-10 layout '
+    'an amount right before a "Current balance" label -'
+)
+
+
+def _anchor_inventory(html: str) -> str:
+    """Return a one-line inventory of the page anchors found and missing."""
+    found = [name for name, pattern in _PAGE_ANCHORS.items() if pattern.search(html)]
+    missing = [name for name in _PAGE_ANCHORS if name not in found]
+    return (
+        f"anchors found: {', '.join(found) or 'none'}; "
+        f"missing: {', '.join(missing) or 'none'}"
+    )
+
+
+def _layout_changed(message: str, html: str) -> LayoutChangedError:
+    """Return a LayoutChangedError for *message* carrying the anchor inventory."""
+    return LayoutChangedError(message, _anchor_inventory(html))
+
+
+def _credits_block_present(html: str) -> bool:
+    """Return True when the page carries any usage-credits block trace.
+
+    No trace at all means the account simply has no usage-credits block (e.g.
+    a free plan), which is not an error. A trace means the block is there, so
+    its balance has to be readable.
+    """
+    return any(
+        _PAGE_ANCHORS[name].search(html) is not None for name in _CREDIT_BLOCK_ANCHORS
+    )
 
 
 @dataclass
@@ -159,7 +231,11 @@ def _check_auth(html: str) -> None:
 def _extract_plan(html: str) -> str:
     match = _PLAN_RE.search(html)
     if not match:
-        raise ParseError("Could not extract plan from HTML.")
+        raise _layout_changed(
+            "the subscription plan could not be read: expected the plan badge "
+            '(<span class="capitalize">pro</span>) on ollama.com/settings',
+            html,
+        )
     return match.group(1).lower()
 
 
@@ -194,31 +270,47 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
     weekly_pos = locate(_WEEKLY_MARKER)
 
     if session_pos == -1 and weekly_pos == -1:
-        # Fallback to position-based extraction if sections not found
-        matches = _PERCENT_RE.findall(html)
-        times = _TIME_RE.findall(html)
-        if len(matches) < 2:
-            raise ParseError(f"Expected 2 usage percentages, found {len(matches)}.")
-        if len(times) < 2:
-            raise ParseError(f"Expected 2 reset timestamps, found {len(times)}.")
-        return float(matches[0]), float(matches[1]), times[0], times[1]
+        # Neither meter carries its label. Guessing the order from the document
+        # order of the percentages would silently swap session and weekly
+        # numbers (and their reset times), so refuse instead of guessing.
+        raise _layout_changed(
+            "neither the 'Session usage' nor the 'Weekly usage' meter is on "
+            "ollama.com/settings, so the two percentages cannot be told apart",
+            html,
+        )
 
     # Extract percentage and time after each section marker
     def extract_after(pos: int, label: str) -> tuple[float, str]:
         # Find the next "% used" after this position using pos parameter (no slicing)
         pct_match = _PERCENT_RE.search(html, pos)
         if not pct_match:
-            raise ParseError(f"Could not find {label} usage percentage.")
+            raise _layout_changed(
+                f"expected the {label} usage percentage ('<value>% used' right "
+                f"after the '{label.capitalize()} usage' label), which is not there",
+                html,
+            )
         # Find the next data-time after this position using pos parameter
         time_match = _TIME_RE.search(html, pos)
         if not time_match:
-            raise ParseError(f"Could not find {label} reset time.")
+            raise _layout_changed(
+                f"expected the {label} reset time (a data-time attribute right "
+                f"after the '{label.capitalize()} usage' meter), which is not there",
+                html,
+            )
         return float(pct_match.group(1)), time_match.group(1)
 
     if session_pos == -1:
-        raise ParseError("Could not find 'Session usage' section in HTML.")
+        raise _layout_changed(
+            "expected the 'Session usage' section (its label and meter) on "
+            "ollama.com/settings, which is not there",
+            html,
+        )
     if weekly_pos == -1:
-        raise ParseError("Could not find 'Weekly usage' section in HTML.")
+        raise _layout_changed(
+            "expected the 'Weekly usage' section (its label and meter) on "
+            "ollama.com/settings, which is not there",
+            html,
+        )
 
     session_pct, session_time = extract_after(session_pos, "session")
     weekly_pct, weekly_time = extract_after(weekly_pos, "weekly")
@@ -226,15 +318,32 @@ def _extract_usage(html: str) -> tuple[float, float, str, str]:
     return session_pct, weekly_pct, session_time, weekly_time
 
 
+def _require_segment_payload(html: str, anchor: str, name: str) -> None:
+    """Raise LayoutChangedError when a request segment lost its count.
+
+    The counters may legitimately be absent - no requests in the period means
+    no segment. A segment that is on the page yet carries no ``data-requests``
+    attribute, however, means the markup changed, and reporting 0 for it would
+    be a silent lie.
+    """
+    if anchor.lower() in html.lower():
+        raise _layout_changed(
+            f"the {name} request segment is on the page, but no "
+            f"{_REQUESTS_ATTRIBUTE} attribute could be read from it",
+            html,
+        )
+
+
 def _extract_web_search_requests(html: str) -> int | None:
     """Extract the number of web search requests reported on the page.
 
     Web search is rendered as a segment inside the usage meters with a
-    ``data-requests`` attribute. Returns the total (summed over all meters) or
-    None when no web search segment is present.
+    ``data-requests`` attribute. Returns the total (summed over all meters), or
+    None when the account made no such requests in the period.
     """
     counts = _WEB_SEARCH_SEGMENT_RE.findall(html)
     if not counts:
+        _require_segment_payload(html, _WEB_SEARCH_ANCHOR, "web search")
         return None
     return sum(int(c) for c in counts)
 
@@ -244,26 +353,44 @@ def _extract_web_fetch_requests(html: str) -> int | None:
 
     Web fetch is rendered as a segment inside the usage meters with a
     ``data-requests`` attribute (same layout as web search). Returns the total
-    (summed over all meters) or None when no web fetch segment is present.
+    (summed over all meters), or None when the account made no such requests in
+    the period.
     """
     counts = _WEB_FETCH_SEGMENT_RE.findall(html)
     if not counts:
+        _require_segment_payload(html, _WEB_FETCH_ANCHOR, "web fetch")
         return None
     return sum(int(c) for c in counts)
 
 
-def _extract_credit_balance(html: str) -> float | None:
+def _extract_credit_balance(html: str, plan: str) -> float | None:
     """Extract the usage credit / current balance shown on the page.
 
     The balance is the text of the ``extra-usage-balance`` element of the
     "Usage credits" section; pages using the older layout render the amount
-    directly before a "Current balance" label instead. Returns None when the
-    section is absent (e.g. plans without usage credit).
+    directly before a "Current balance" label instead.
+
+    Returns None only for a free plan whose page carries no trace of a usage
+    credits block at all. Anything else raises LayoutChangedError: a redesign
+    of the site must not be reported as a zero balance.
     """
     match = _CREDIT_BALANCE_ID_RE.search(html)
     if match is None:
         match = _CREDIT_BALANCE_LABEL_RE.search(html)
     if match is None:
+        if _credits_block_present(html):
+            raise _layout_changed(
+                f"{_CREDIT_EXPECTATION} could not be found on ollama.com/settings",
+                html,
+            )
+        if plan != "free":
+            raise _layout_changed(
+                "the page carries no trace of a \"Usage credits\" block, which "
+                f"a {plan.upper()} plan normally has - either "
+                "ollama.com/settings changed its layout or this account really "
+                "has no usage credit",
+                html,
+            )
         return None
     raw = re.sub(r"<[^>]*>", "", match.group(1))  # drop nested markup
     raw = re.sub(r"[^\d.,]", "", raw)  # drop currency symbol/space
@@ -274,23 +401,40 @@ def _extract_credit_balance(html: str) -> float | None:
     try:
         return float(raw)
     except ValueError:
-        return None
+        shown = " ".join(match.group(1).split()) or "nothing"
+        raise _layout_changed(
+            f"{_CREDIT_EXPECTATION} could not be read: the element contains "
+            f"{shown!r} instead of an amount",
+            html,
+        ) from None
 
 
 def _extract_models(html: str) -> list[dict[str, int]] | None:
     """Extract the per-model request counts from the "Models used this week" list.
 
     Returns a list of {"name": ..., "requests": ...} dicts, or None when the
-    list is not present.
+    list is not present or empty (a fresh period without requests). When the
+    list shows request counts but none of its rows can be read, a
+    LayoutChangedError is raised.
     """
     pos = html.lower().find(_MODELS_LIST_MARKER)
     if pos == -1:
-        return None
+        anchor = _PAGE_ANCHORS["models list"].search(html)
+        if anchor is None:
+            return None
+        pos = anchor.start()
     # Only look within the models list section (up to the next script tag).
     end = html.find("<script", pos)
     section = html[pos:end] if end != -1 else html[pos:]
     matches = _MODEL_ITEM_RE.findall(section)
     if not matches:
+        if re.search(r"\d+\s+requests", section, re.IGNORECASE):
+            raise _layout_changed(
+                "the 'Models used this week' list carries request counts, but "
+                "none of its rows could be read (expected "
+                '<span title="name">name</span> ... <span>N requests</span>)',
+                html,
+            )
         return None
     return [
         {"name": name, "requests": int(count)}
@@ -305,7 +449,7 @@ def parse_html(html: str) -> dict:
     session_pct, weekly_pct, session_time, weekly_time = _extract_usage(html)
     web_search_requests = _extract_web_search_requests(html)
     web_fetch_requests = _extract_web_fetch_requests(html)
-    credit_balance = _extract_credit_balance(html)
+    credit_balance = _extract_credit_balance(html, plan)
     models = _extract_models(html)
     logger.debug("Parsing HTML...")
     logger.debug(
