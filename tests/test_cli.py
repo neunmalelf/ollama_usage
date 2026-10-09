@@ -300,6 +300,20 @@ class TestLayoutChangedErrorOutput:
         assert "usage: ollama_usage" not in err  # no argparse help dump
         assert "cookie" not in err  # no misleading cookie hint
 
+    def test_layout_change_quits_the_live_view_too(self, capsys) -> None:
+        from ollama_usage.cli import main
+        from ollama_usage.exceptions import LayoutChangedError
+        with patch("ollama_usage.cli.get_cookie_auto", return_value="fake-cookie"), \
+             patch("ollama_usage.cli.get_usage",
+                   side_effect=LayoutChangedError("boom", "")), \
+             patch("ollama_usage.cli._autorefresh_sleep"), \
+             patch("sys.argv", ["ollama_usage", "--minidisplay"]), \
+             pytest.raises(SystemExit) as exit_info:
+            main()
+        captured = capsys.readouterr()
+        assert exit_info.value.code == 1
+        assert "changed its layout" in captured.err
+
     def test_cookie_hint_still_shown_for_auth_errors(self, capsys) -> None:
         from ollama_usage.exceptions import AuthError
         code, out, err = self._run_dataonly(capsys, AuthError("cookie is invalid"))
