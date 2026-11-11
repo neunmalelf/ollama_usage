@@ -1,7 +1,8 @@
 """ollama_usage - CLI and library to check your Ollama Cloud quota usage.
 
-The package version is ``MAJOR.MINOR.YYYYMMDDhhmmssZ``: the micro segment is a
-UTC timestamp (the trailing ``Z`` marks UTC).
+The package version is ``MAJOR.MINOR.YYYYMMDDhhmmss``: the micro segment is a
+14-digit UTC timestamp (no trailing ``Z``), as printed by ``~/sbin/timestamp``
+and required for a PEP 440-valid version.
 """
 
 from ollama_usage.scraper import get_usage

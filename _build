@@ -17,7 +17,7 @@
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20260923114844"
+__VERSION__="1.0.20261111132922"
 
 set -e
 
@@ -211,16 +211,22 @@ VERSION=$("$CONFIGURATION_PYTHON" -c "from ollama_usage import __version__ as v;
 [ -n "$VERSION" ] || VERSION="0.0.0"
 echo "[_build] ollama_usage version: $VERSION"
 
-# Windows version metadata (16-bit fields, max 65535; collapse long digit runs
-# like a YYYYMMDDhhmmss timestamp into the first 5 digits).
+# Windows version metadata (16-bit fields, max 65535). The micro segment is a
+# 14-digit YYYYMMDDhhmmss UTC timestamp; split it into year (build) and MMDD
+# (revision) so every day maps to a distinct, monotonic version. The old
+# `int(p[:5])` collapse gave every build from October to December the same
+# value (20261).
 WIN_VERSION=$("$CONFIGURATION_PYTHON" -c "
 import re
 from ollama_usage import __version__ as v
 parts = [p for p in re.split(r'[^0-9]+', str(v)) if p]
-parts = [str(max(0, min(65535, int(p[:5])))) for p in parts]
-while len(parts) < 4:
-    parts.append('0')
-print('.'.join(parts[:4]))
+if len(parts) >= 3 and len(parts[2]) >= 8:
+    ts = parts[2]
+    fields = [parts[0][:5], parts[1][:5], ts[:4], ts[4:8]]
+    print('.'.join(str(min(65535, int(f))) for f in fields))
+else:
+    fields = [str(max(0, min(65535, int(p[:5])))) for p in parts]
+    print('.'.join((fields + ['0'] * 4)[:4]) or '0.0.0.0')
 " 2>/dev/null || echo "0.0.0.0")
 
 # --- ensure nuitka -----------------------------------------------------------

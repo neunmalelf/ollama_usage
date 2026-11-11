@@ -1,7 +1,8 @@
 # ollama_usage — Technical Documentation
 
-Timestamped incident/fix records. Format: `YYYY-MM-DDThh:mm:ssZ` (UTC, trailing `Z`
-per project convention `YYYYMMDDhhmmssZ`).
+Timestamped incident/fix records. Format: `YYYY-MM-DDThh:mm:ssZ` (UTC, the trailing `Z` marks UTC). The version
+micro segment uses the same timestamp as bare `YYYYMMDDhhmmss` (no `Z`, so the
+version stays PEP 440-valid).
 
 ---
 
