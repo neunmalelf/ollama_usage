@@ -689,7 +689,7 @@ machine.
 
 Requirements:
 - Python with `nuitka` installed: `pip install "ollama_usage[dev]"` (or `pip install nuitka`)
-- On Python 3.13+, Nuitka needs the **Zig** compiler (installed via scoop or downloaded automatically on first build — the script handles this with `--zig`).
+- On Windows with Python 3.13+, Nuitka has no working MinGW64 backend, so the script builds with **Zig** (`--zig`, downloaded automatically on the first build). On Linux/macOS it uses the system gcc/clang.
 
 > The build takes a few minutes on first run (it compiles all modules to C).
 
