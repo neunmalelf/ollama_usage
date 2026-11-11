@@ -17,7 +17,7 @@
 # On Python 3.14 Nuitka's MinGW64 backend is not supported, so we use the
 # --zig flag (Nuitka downloads the Zig compiler automatically on first build).
 
-__VERSION__="1.0.20261111132922"
+__version__="20261111141405"
 
 set -e
 
@@ -29,7 +29,7 @@ NO_INSTALL=0
 # --- usage -------------------------------------------------------------------
 usage() {
     cat <<EOF
-_build v${__VERSION__} - build ollama_usage into a single binary with Nuitka
+_build v${__version__} - build ollama_usage into a single binary with Nuitka
 
 usage: ./_build [OPTIONS]
 
@@ -59,7 +59,7 @@ EOF
 # --- argument parsing --------------------------------------------------------
 case "${1:-}" in
     -h|--help)  usage; exit 0 ;;
-    --version)  echo "[_build] v${__VERSION__}"; exit 0 ;;
+    --version)  echo "[_build] v${__version__}"; exit 0 ;;
     --release)     DO_RELEASE=1 ;;
     --no-install)  NO_INSTALL=1 ;;
     "")            : ;;
@@ -67,7 +67,7 @@ case "${1:-}" in
 esac
 
 echo ""
-echo "[_build] v${__VERSION__} - build ollama_usage standalone binary"
+echo "[_build] v${__version__} - build ollama_usage standalone binary"
 echo ""
 
 # =============================================================================
