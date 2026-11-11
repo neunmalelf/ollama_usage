@@ -181,6 +181,7 @@ ollama_usage --notify --autorefresh 60 --notify-threshold 75
 # Debug mode
 ollama_usage --debug
 ollama_usage --debug --browser firefox
+ollama_usage --debug-firefox-profiles   # list every Firefox profile searched
 
 # GUI window (OK + Refresh buttons)
 ollama_usage --gui
@@ -674,11 +675,17 @@ Options:
 |--------|--------|
 | `--no-install` | Build only — skip copying the binary to the bin directory |
 | `--release` | Build, tag with the version, and publish a GitHub release via `gh` |
+| `-h`, `--help` | Show the build script's help and exit |
+| `--version` | Show the build script's own version and exit |
 
 ```bash
 ./_build --no-install     # just produce dist/
 ./_build --release        # build + tag + GitHub release
 ```
+
+`BUILD_JOBS=<n>` sets the number of parallel C compiler jobs. It defaults to
+`1`; the script caps it at half the logical CPUs, so a build never pegs the
+machine.
 
 Requirements:
 - Python with `nuitka` installed: `pip install "ollama_usage[dev]"` (or `pip install nuitka`)
